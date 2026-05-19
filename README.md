@@ -8,8 +8,6 @@ Colección de scripts Windows (.bat) para operaciones sobre archivos PDF, usando
 - PowerShell 5.1 (incluido en Windows 10+)
 - Conexión a internet solo para la primera ejecución de `setup.bat`
 
-No es necesario instalar nada manualmente. El setup descarga las dependencias automáticamente.
-
 ## Instalación
 
 ```bat
@@ -18,7 +16,9 @@ setup.bat
 
 Al ejecutarlo por primera vez:
 1. Descarga `cpdf.exe` en la carpeta `dependencias\`
-2. Ofrece crear accesos directos en el menú **Enviar a** para cada script disponible
+2. Descarga `7za.exe` (7-Zip portable) en la carpeta `dependencias\`
+3. Verifica si Ghostscript está instalado en el sistema; si no, descarga el instalador oficial y lo lanza — seguir el asistente dejando las opciones por defecto (la opción *Add to PATH* viene marcada, no cambiarla)
+4. Verifica los accesos directos en el menú **Enviar a**: crea o actualiza solo los que falten o apunten a una ruta incorrecta
 
 A partir de ahí los scripts funcionan sin conexión a internet.
 
