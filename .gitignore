@@ -1,0 +1,10 @@
+# Dependencias descargadas localmente por setup.bat
+dependencias/
+
+# Archivos temporales de Windows
+Thumbs.db
+desktop.ini
+*.tmp
+
+# Carpeta de configuración local de Claude Code
+.claude/
