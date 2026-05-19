@@ -27,6 +27,7 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 | Archivo | Descripción |
 |---|---|
 | `filename_header_REEMPLAZA_drag_and_drop.bat` | Inserta el nombre del archivo como encabezado en cada página y sobreescribe el PDF original |
+| `reducir_peso_REEMPLAZA_drag_and_drop.bat` | Reduce el peso del PDF con calidad `/ebook` y sobreescribe el original |
 
 ## Uso
 
@@ -36,11 +37,13 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 
 ## Dependencias
 
-| Herramienta | Uso | Licencia |
-|---|---|---|
-| [cpdf](http://www.coherentpdf.com/) | Procesamiento de PDFs | Gratuito para uso no comercial |
+`setup.bat` descarga y configura todo automáticamente en `dependencias\` (carpeta ignorada por git).
 
-Los binarios se descargan desde [cpdf-binaries](https://github.com/coherentgraphics/cpdf-binaries) y se almacenan en `dependencias\` (carpeta ignorada por git).
+| Herramienta | Usado por | Licencia |
+|---|---|---|
+| [cpdf](http://www.coherentpdf.com/) | Scripts de encabezado | Gratuito para uso no comercial |
+| [Ghostscript](https://www.ghostscript.com/) | Scripts de reducción de peso | AGPL / Comercial |
+| [7-Zip](https://www.7-zip.org/) | Extracción de dependencias | LGPL |
 
 ## Licencia
 
