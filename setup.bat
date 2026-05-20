@@ -103,6 +103,14 @@ set "_LNK=PDF - Convertir a escala de grises reemplazando archivo(s)"
 set "_TGT=%ROOT%escala_grises_REEMPLAZA_drag_and_drop.bat"
 call :check_lnk
 
+set "_LNK=PDF - Dividir en paginas individuales"
+set "_TGT=%ROOT%dividir_paginas_drag_and_drop.bat"
+call :check_lnk
+
+set "_LNK=PDF - Combinar varios en uno"
+set "_TGT=%ROOT%combinar_PDFs_drag_and_drop.bat"
+call :check_lnk
+
 :fin
 echo.
 echo Setup completado.
