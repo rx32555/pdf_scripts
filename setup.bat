@@ -99,6 +99,10 @@ set "_LNK=PDF - Reducir peso reemplazando archivo(s)"
 set "_TGT=%ROOT%reducir_peso_REEMPLAZA_drag_and_drop.bat"
 call :check_lnk
 
+set "_LNK=PDF - Convertir a escala de grises reemplazando archivo(s)"
+set "_TGT=%ROOT%escala_grises_REEMPLAZA_drag_and_drop.bat"
+call :check_lnk
+
 :fin
 echo.
 echo Setup completado.

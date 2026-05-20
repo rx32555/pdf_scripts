@@ -27,7 +27,8 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 | Archivo | Descripción |
 |---|---|
 | `filename_header_REEMPLAZA_drag_and_drop.bat` | Inserta el nombre del archivo como encabezado en cada página y sobreescribe el PDF original |
-| `reducir_peso_REEMPLAZA_drag_and_drop.bat` | Reduce el peso del PDF con calidad `/ebook` y sobreescribe el original |
+| `reducir_peso_REEMPLAZA_drag_and_drop.bat` | Reduce el peso del PDF con calidad `/printer` (300 dpi, apta para imprimir) y sobreescribe el original |
+| `escala_grises_REEMPLAZA_drag_and_drop.bat` | Convierte el PDF a escala de grises y sobreescribe el original |
 
 ## Uso
 

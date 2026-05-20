@@ -14,7 +14,7 @@ for %%F in (%*) do (
         set "entrada=%%~fF"
         set "salida=%%~dpnF_temp.pdf"
 
-        "!GS!" -sDEVICE=pdfwrite -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -sOutputFile="!salida!" "!entrada!"
+        "!GS!" -sDEVICE=pdfwrite -sColorConversionStrategy=Gray -dProcessColorModel=/DeviceGray -dNOPAUSE -dQUIET -dBATCH -sOutputFile="!salida!" "!entrada!"
 
         copy /Y "!salida!" "!entrada!" >nul
         del "!salida!"
