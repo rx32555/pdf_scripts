@@ -36,7 +36,7 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 
 **Drag & Drop** — Arrastrar uno o varios PDFs sobre el `.bat`.
 
-**Menú contextual** — Click derecho sobre PDF(s) → Enviar a → nombre del script (configurado por `setup.bat`).
+**Enviar a** — Click derecho → **Enviar a** → nombre del script, configurado por `setup.bat`.
 
 ## Dependencias
 
@@ -44,8 +44,8 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 
 | Herramienta | Usado por | Licencia |
 |---|---|---|
-| [cpdf](http://www.coherentpdf.com/) | Scripts de encabezado | Gratuito para uso no comercial |
-| [Ghostscript](https://www.ghostscript.com/) | Scripts de reducción de peso | AGPL / Comercial |
+| [cpdf](http://www.coherentpdf.com/) | Encabezado, dividir páginas, combinar | Gratuito para uso no comercial |
+| [Ghostscript](https://www.ghostscript.com/) | Reducir peso, escala de grises, índice de combinar | AGPL / Comercial |
 | [7-Zip](https://www.7-zip.org/) | Extracción de dependencias | LGPL |
 
 ## Licencia
