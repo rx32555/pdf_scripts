@@ -1,7 +1,6 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# DWM: barra de titulo oscura (Windows 10 v2004+ / Windows 11)
 try {
     Add-Type -TypeDefinition '
 using System;
@@ -15,7 +14,7 @@ public class DwmApi {
 
 [void][System.Windows.Forms.Application]::EnableVisualStyles()
 
-# Archivos recibidos por argumento
+# Archivos recibidos
 $files = $args |
     Where-Object { $_ -match '\.pdf$' -and (Test-Path $_ -PathType Leaf) } |
     ForEach-Object { [System.IO.FileInfo]$_ }
@@ -29,37 +28,106 @@ if ($files.Count -eq 0) {
     exit
 }
 
+# Config persistente
+$configPath = [System.IO.Path]::Combine($PSScriptRoot, "combinar_PDFs_config.json")
+
+function Load-Config {
+    if (Test-Path $configPath) {
+        try {
+            $j = Get-Content $configPath -Raw | ConvertFrom-Json
+            return @{
+                AbrirAlTerminar  = [bool]$j.AbrirAlTerminar
+                TemaOscuro       = [bool]$j.TemaOscuro
+                CerrarAlTerminar = if ($null -eq $j.CerrarAlTerminar) { $true  } else { [bool]$j.CerrarAlTerminar }
+                GenerarIndice    = if ($null -eq $j.GenerarIndice)    { $false } else { [bool]$j.GenerarIndice    }
+            }
+        } catch {}
+    }
+    return @{ AbrirAlTerminar = $true; TemaOscuro = $true; CerrarAlTerminar = $true; GenerarIndice = $false }
+}
+
+function Save-Config {
+    try {
+        [ordered]@{
+            AbrirAlTerminar  = $chkAbrir.Checked
+            TemaOscuro       = $script:isDark
+            CerrarAlTerminar = $chkCerrar.Checked
+            GenerarIndice    = $chkToc.Checked
+        } | ConvertTo-Json | Set-Content $configPath -Encoding UTF8
+    } catch {}
+}
+
+$cfg = Load-Config
+$script:isDark = $cfg.TemaOscuro
+
+# Paletas de color
+$palettes = @{
+    dark = @{
+        Bg       = [System.Drawing.Color]::FromArgb( 30,  30,  30)
+        Surface  = [System.Drawing.Color]::FromArgb( 37,  37,  38)
+        Surface2 = [System.Drawing.Color]::FromArgb( 45,  45,  48)
+        Border   = [System.Drawing.Color]::FromArgb( 62,  62,  66)
+        Text     = [System.Drawing.Color]::FromArgb(220, 220, 220)
+        TextDim  = [System.Drawing.Color]::FromArgb(140, 140, 140)
+        Accent   = [System.Drawing.Color]::FromArgb(  0, 120, 212)
+        AccHover = [System.Drawing.Color]::FromArgb( 16, 110, 190)
+        AccPress = [System.Drawing.Color]::FromArgb(  0,  90, 158)
+        SelectBg = [System.Drawing.Color]::FromArgb( 28,  58,  90)
+        SelText  = [System.Drawing.Color]::FromArgb(255, 255, 255)
+        BtnHover = [System.Drawing.Color]::FromArgb( 62,  62,  66)
+        BtnPress = [System.Drawing.Color]::FromArgb( 20,  20,  20)
+        Input    = [System.Drawing.Color]::FromArgb( 58,  58,  62)
+    }
+    light = @{
+        Bg       = [System.Drawing.Color]::FromArgb(245, 245, 245)
+        Surface  = [System.Drawing.Color]::FromArgb(255, 255, 255)
+        Surface2 = [System.Drawing.Color]::FromArgb(235, 235, 235)
+        Border   = [System.Drawing.Color]::FromArgb(200, 200, 200)
+        Text     = [System.Drawing.Color]::FromArgb( 30,  30,  30)
+        TextDim  = [System.Drawing.Color]::FromArgb(100, 100, 100)
+        Accent   = [System.Drawing.Color]::FromArgb(  0, 120, 212)
+        AccHover = [System.Drawing.Color]::FromArgb( 16, 110, 190)
+        AccPress = [System.Drawing.Color]::FromArgb(  0,  90, 158)
+        SelectBg = [System.Drawing.Color]::FromArgb(204, 228, 247)
+        SelText  = [System.Drawing.Color]::FromArgb( 30,  30,  30)
+        BtnHover = [System.Drawing.Color]::FromArgb(220, 220, 220)
+        BtnPress = [System.Drawing.Color]::FromArgb(195, 195, 195)
+        Input    = [System.Drawing.Color]::FromArgb(255, 255, 255)
+    }
+}
+
+$script:pal = if ($script:isDark) { $palettes.dark } else { $palettes.light }
+
 # Estado
 $script:rutas         = [System.Collections.ArrayList]@()
 $script:pagCount      = @{}
 $script:dragFromIndex = -1
 $script:dragStartPos  = $null
+$script:countdown     = 0
+$script:outputDir     = $files[0].DirectoryName
 
-# Paleta de colores
-$clrBg       = [System.Drawing.Color]::FromArgb( 30,  30,  30)   # fondo form
-$clrSurface  = [System.Drawing.Color]::FromArgb( 37,  37,  38)   # fila par listbox
-$clrSurface2 = [System.Drawing.Color]::FromArgb( 45,  45,  48)   # fila impar / textbox
-$clrBorder   = [System.Drawing.Color]::FromArgb( 62,  62,  66)   # bordes / separador
-$clrText     = [System.Drawing.Color]::FromArgb(220, 220, 220)   # texto principal
-$clrTextDim  = [System.Drawing.Color]::FromArgb(140, 140, 140)   # texto secundario
-$clrAccent   = [System.Drawing.Color]::FromArgb(  0, 120, 212)   # azul acento
-$clrAccHover = [System.Drawing.Color]::FromArgb( 16, 110, 190)
-$clrAccPress = [System.Drawing.Color]::FromArgb(  0,  90, 158)
-$clrSelectBg = [System.Drawing.Color]::FromArgb( 28,  58,  90)   # fondo fila seleccionada
-$clrBtnHover = [System.Drawing.Color]::FromArgb( 62,  62,  66)
-$clrBtnPress = [System.Drawing.Color]::FromArgb( 20,  20,  20)
+# Brushes para owner draw (se recrean al cambiar tema)
+$script:brText    = [System.Drawing.SolidBrush]::new($script:pal.Text)
+$script:brSelText = [System.Drawing.SolidBrush]::new($script:pal.SelText)
+$script:brRow1    = [System.Drawing.SolidBrush]::new($script:pal.Surface)
+$script:brRow2    = [System.Drawing.SolidBrush]::new($script:pal.Surface2)
+$script:brSelBg   = [System.Drawing.SolidBrush]::new($script:pal.SelectBg)
+$script:brAccent  = [System.Drawing.SolidBrush]::new($script:pal.Accent)
+$script:sfVC      = New-Object System.Drawing.StringFormat
+$script:sfVC.LineAlignment = [System.Drawing.StringAlignment]::Center
 
-# Brushes cacheados para el owner draw (evitar GDI leaks)
-$script:brText    = [System.Drawing.SolidBrush]::new($clrText)
-$script:brWhite   = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
-$script:brRow1    = [System.Drawing.SolidBrush]::new($clrSurface)
-$script:brRow2    = [System.Drawing.SolidBrush]::new($clrSurface2)
-$script:brSelBg   = [System.Drawing.SolidBrush]::new($clrSelectBg)
-$script:brAccent  = [System.Drawing.SolidBrush]::new($clrAccent)
-$script:sfVCenter = New-Object System.Drawing.StringFormat
-$script:sfVCenter.LineAlignment = [System.Drawing.StringAlignment]::Center
+function Update-Brushes {
+    foreach ($b in @($script:brText, $script:brSelText, $script:brRow1,
+                     $script:brRow2, $script:brSelBg, $script:brAccent)) { $b.Dispose() }
+    $script:brText    = [System.Drawing.SolidBrush]::new($script:pal.Text)
+    $script:brSelText = [System.Drawing.SolidBrush]::new($script:pal.SelText)
+    $script:brRow1    = [System.Drawing.SolidBrush]::new($script:pal.Surface)
+    $script:brRow2    = [System.Drawing.SolidBrush]::new($script:pal.Surface2)
+    $script:brSelBg   = [System.Drawing.SolidBrush]::new($script:pal.SelectBg)
+    $script:brAccent  = [System.Drawing.SolidBrush]::new($script:pal.Accent)
+}
 
-# Consultar numero de paginas con cpdf (antes de abrir el form)
+# Consultar paginas con cpdf
 $cpdfExe = [System.IO.Path]::Combine($PSScriptRoot, "dependencias", "cpdf.exe")
 if (Test-Path $cpdfExe) {
     foreach ($f in $files) {
@@ -73,39 +141,32 @@ if (Test-Path $cpdfExe) {
     }
 }
 
-# Helpers (logica sin cambios respecto a version anterior)
+# Helpers de lista (logica sin cambios)
 function Get-DisplayName($ruta) {
     $nombre = [System.IO.Path]::GetFileName($ruta)
     $n = $script:pagCount[$ruta]
     if ($n -gt 0) { return "$nombre  ($n pags.)" }
     return $nombre
 }
-
 function Swap-Item($i, $j) {
     $d = $listBox.Items[$i];  $listBox.Items.RemoveAt($i);  $listBox.Items.Insert($j, $d)
     $r = $script:rutas[$i];   $script:rutas.RemoveAt($i);   $script:rutas.Insert($j, $r)
 }
-
-function Move-Item($from, $to) {
+function Reorder-ListItem($from, $to) {
     if ($from -eq $to) { return }
     $d = $listBox.Items[$from];  $listBox.Items.RemoveAt($from)
     $r = $script:rutas[$from];   $script:rutas.RemoveAt($from)
     $at = if ($to -gt $from) { $to - 1 } else { $to }
     $listBox.Items.Insert($at, $d);  $script:rutas.Insert($at, $r)
 }
-
-function Refresh-Folder {
-    $lblFolder.Text = "Destino: " + [System.IO.Path]::GetDirectoryName($script:rutas[0])
-}
-
+function Refresh-Folder { $lblFolder.Text = "Destino: " + $script:outputDir }
 function Remove-Selected {
     $i = $listBox.SelectedIndex
     if ($i -lt 0 -or $listBox.Items.Count -le 1) { return }
     $listBox.Items.RemoveAt($i);  $script:rutas.RemoveAt($i)
     $listBox.SelectedIndex = [Math]::Min($i, $listBox.Items.Count - 1)
-    Refresh-Folder
+    Update-TitleLabel;  Refresh-Folder
 }
-
 function Sort-Lista($modo) {
     $pares = 0..($listBox.Items.Count - 1) | ForEach-Object {
         $r = $script:rutas[$_];  $fi = Get-Item $r
@@ -118,37 +179,253 @@ function Sort-Lista($modo) {
     }
     $listBox.Items.Clear();  $script:rutas.Clear()
     foreach ($p in $ordenados) {
-        [void]$listBox.Items.Add((Get-DisplayName $p.Ruta))
-        [void]$script:rutas.Add($p.Ruta)
+        [void]$listBox.Items.Add((Get-DisplayName $p.Ruta));  [void]$script:rutas.Add($p.Ruta)
     }
     $listBox.SelectedIndex = 0;  Refresh-Folder
 }
-
 function Invertir-Lista {
     $copia = [System.Collections.ArrayList]@($script:rutas);  $copia.Reverse()
     $listBox.Items.Clear();  $script:rutas.Clear()
     foreach ($r in $copia) {
-        [void]$listBox.Items.Add((Get-DisplayName $r))
-        [void]$script:rutas.Add($r)
+        [void]$listBox.Items.Add((Get-DisplayName $r));  [void]$script:rutas.Add($r)
     }
     $listBox.SelectedIndex = 0;  Refresh-Folder
 }
-
-# Helper: aplicar estilo oscuro a botones secundarios
-function Set-DarkButton($btn) {
-    $btn.FlatStyle = "Flat"
-    $btn.BackColor = $clrSurface2
-    $btn.ForeColor = $clrText
-    $btn.FlatAppearance.BorderColor        = $clrBorder
-    $btn.FlatAppearance.BorderSize         = 1
-    $btn.FlatAppearance.MouseOverBackColor = $clrBtnHover
-    $btn.FlatAppearance.MouseDownBackColor = $clrBtnPress
+function Update-TitleLabel {
+    $n = $listBox.Items.Count
+    $sufijo = if ($n -ne 1) { 's' } else { '' }
+    $up = [char]0x2191;  $dn = [char]0x2193
+    $lblTitulo.Text = "$n PDF$sufijo - usa $up $dn o arrastra para reordenar:"
+}
+function Add-Files($paths) {
+    $added = 0
+    foreach ($path in $paths) {
+        $path = [string]$path
+        if ($path -match '\.pdf$' -and (Test-Path $path -PathType Leaf) -and ($script:rutas -notcontains $path)) {
+            if (Test-Path $cpdfExe) {
+                try {
+                    $raw = & $cpdfExe -pages $path 2>$null
+                    $n = 0
+                    if ([int]::TryParse(($raw -join '').Trim(), [ref]$n)) { $script:pagCount[$path] = $n }
+                } catch {}
+            }
+            [void]$listBox.Items.Add((Get-DisplayName $path))
+            [void]$script:rutas.Add($path)
+            $added++
+        }
+    }
+    if ($added -gt 0) { Update-TitleLabel; Refresh-Folder }
 }
 
-# Unicode via escape (fuente 100% ASCII)
-$arrowUp   = [char]0x2191
-$arrowDown = [char]0x2193
-$enye      = [char]0x00F1
+# Generacion de indice TOC
+function EscPS([string]$str) {
+    $sb = [System.Text.StringBuilder]::new()
+    foreach ($c in $str.ToCharArray()) {
+        $code = [int][char]$c
+        if    ($c -eq '\')                       { [void]$sb.Append('\\') }
+        elseif($c -eq '(')                       { [void]$sb.Append('\(') }
+        elseif($c -eq ')')                       { [void]$sb.Append('\)') }
+        elseif($code -ge 32  -and $code -le 126) { [void]$sb.Append($c)  }
+        elseif($code -ge 128 -and $code -le 255) { [void]$sb.Append('\' + [Convert]::ToString($code,8).PadLeft(3,'0')) }
+    }
+    return $sb.ToString()
+}
+
+function Build-TocPS($entries, $docTitle) {
+    $ml = 56; $mr = 556   # Carta: 612 pts ancho, margenes simetricos de 56 pts
+    $maxLines   = 33
+    $totalCount = $entries.Count
+    $arr   = @($entries)
+    $shown = if ($totalCount -gt $maxLines) { $arr[0..($maxLines - 1)] } else { $arr }
+
+    $titleE  = EscPS $docTitle
+    $dateE   = EscPS (Get-Date -Format 'dd/MM/yyyy HH:mm')
+    $footerE = EscPS (([char]0x00CD) + 'ndice de documentos combinados')
+
+    $L = [System.Collections.Generic.List[string]]::new()
+    $L.Add('%!PS-Adobe-3.0')
+    $L.Add('%%Pages: 1')
+    $L.Add('%%EndComments')
+    $L.Add('%%Page: 1 1')
+    # Declarar tamano A4 (595x842 pts) explicitamente; sin esto GS usa Letter y Y=806 queda fuera de pagina
+    $L.Add('<< /PageSize [612 792] /ImagingBBox null >> setpagedevice')
+    # Definiciones dentro de la pagina para evitar problemas de scope prolog/pagina
+    $L.Add('/ReencodeISO {')
+    $L.Add('  exch findfont dup length dict begin')
+    $L.Add('    { 1 index /FID ne { def } { pop pop } ifelse } forall')
+    $L.Add('    /Encoding ISOLatin1Encoding def currentdict end definefont pop')
+    $L.Add('} def')
+    $L.Add('/Helvetica /Helvetica-L1 ReencodeISO')
+    $L.Add('/Helvetica-Bold /HelveticaBold-L1 ReencodeISO')
+    $L.Add('/TF /HelveticaBold-L1 findfont 15   scalefont def')
+    $L.Add('/BF /Helvetica-L1     findfont  9.5 scalefont def')
+    $L.Add('/SF /Helvetica-L1     findfont  7.5 scalefont def')
+    # Cabecera visual  (coordenadas Y para Carta: 792 pts, margen sup ~26 pts)
+    $L.Add("TF setfont $ml 766 moveto ($titleE) show")
+    $L.Add("SF setfont 0.45 setgray $ml 752 moveto (Generado: $dateE) show 0 setgray")
+    $L.Add("0.65 setgray 0.4 setlinewidth $ml 746 moveto $mr 746 lineto stroke 0 setgray")
+    $L.Add("SF setfont 0.45 setgray $ml 737 moveto (Archivo) show")
+    $L.Add("(Pag.) dup stringwidth pop $mr exch sub 737 moveto show 0 setgray")
+    $L.Add("0.65 setgray 0.3 setlinewidth $ml 732 moveto $mr 732 lineto stroke 0 setgray")
+
+    $y = 719; $lineH = 18
+    $bookmarks = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($e in $shown) {
+        $raw   = if ($e.Name.Length -gt 65) { $e.Name.Substring(0, 62) + '...' } else { $e.Name }
+        $nameE = EscPS $raw
+        $pgE   = EscPS "pag. $($e.StartPage)"
+        $sepY  = $y - 6
+        $lly   = $y - 3
+        $ury   = $y + 13
+
+        # Contenido visual
+        $L.Add("BF setfont $ml $y moveto ($nameE) show")
+        $L.Add("($pgE) dup stringwidth pop $mr exch sub $y moveto show")
+        $L.Add("0.87 setgray 0.25 setlinewidth $ml $sepY moveto $mr $sepY lineto stroke 0 setgray")
+
+        # Hipervínculo: anota el area del texto para que sea clickeable
+        $L.Add("[ /Rect [$ml $lly $mr $ury] /Page $($e.StartPage) /View [/XYZ null null null] /Subtype /Link /ANN pdfmark")
+
+        # Bookmark para panel de navegacion
+        $bookmarks.Add("[ /Title ($nameE) /Page $($e.StartPage) /View [/FIT] /OUT pdfmark")
+
+        $y -= $lineH
+    }
+    if ($totalCount -gt $maxLines) {
+        $moreE = EscPS "... y $($totalCount - $maxLines) archivo(s) mas"
+        $L.Add("SF setfont 0.5 setgray $ml $y moveto ($moreE) show 0 setgray")
+    }
+
+    # Bookmarks (pdfmarks de nivel documento, se añaden antes de showpage)
+    foreach ($bkm in $bookmarks) { $L.Add($bkm) }
+
+    # Pie de pagina
+    $L.Add("SF setfont 0.5 setgray $ml 30 moveto ($footerE) show 0 setgray")
+    $L.Add('showpage')
+    $L.Add('%%EOF')
+
+    return $L -join "`r`n"
+}
+
+function Add-TocAndBookmarks($combinedPdf, $outputPdf) {
+    $gsExe = 'gswin64c.exe'
+    if (-not (Get-Command $gsExe -ErrorAction SilentlyContinue)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Ghostscript no encontrado en PATH.`nEjecuta setup.bat para instalarlo.",
+            "Indice: error", [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return $false
+    }
+
+    # Calcular pagina de inicio de cada archivo
+    # (pagina 1 = indice TOC, contenido empieza en pagina 2)
+    $pageOffset = 2
+    $entries = [System.Collections.ArrayList]@()
+    foreach ($r in $script:rutas) {
+        $n = if ($script:pagCount.ContainsKey($r)) { [int]$script:pagCount[$r] } else { 1 }
+        [void]$entries.Add([PSCustomObject]@{
+            Name      = [System.IO.Path]::GetFileName($r)
+            StartPage = $pageOffset
+        })
+        $pageOffset += $n
+    }
+
+    $docTitle = [System.IO.Path]::GetFileNameWithoutExtension($outputPdf)
+    if ([string]::IsNullOrWhiteSpace($docTitle)) { $docTitle = 'Documentos combinados' }
+    $uid      = [System.IO.Path]::GetRandomFileName() -replace '\.', ''
+    $tocPs    = [System.IO.Path]::Combine($script:outputDir, "_toctmp_$uid.ps")
+
+    try {
+        # Generar PostScript con hipervinculos y bookmarks vía pdfmark
+        $psContent = Build-TocPS $entries $docTitle
+        [System.IO.File]::WriteAllText($tocPs, $psContent, [System.Text.Encoding]::ASCII)
+
+        # Un solo run de GS: procesa toc.ps (pag.1 con pdfmarks) + combined.pdf (resto)
+        # Los /Page N en pdfmarks referencian el documento final completo directamente
+        if (Test-Path $outputPdf) { Remove-Item $outputPdf -Force }
+        $gsOut = & $gsExe -sDEVICE=pdfwrite -dNOPAUSE -dBATCH `
+                          "-sOutputFile=$outputPdf" $tocPs $combinedPdf 2>&1
+
+        if (-not (Test-Path $outputPdf)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Ghostscript no pudo generar el indice.`n`n$($gsOut -join "`n")",
+                "Indice: error GS", [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning)
+            return $false
+        }
+        return $true
+
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Error generando indice: $_", "Indice: error",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return $false
+    } finally {
+        if (Test-Path $tocPs) { Remove-Item $tocPs -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# Helpers de tema
+function Set-BtnStyle($btn) {
+    $btn.FlatStyle = "Flat"
+    $btn.BackColor = $script:pal.Surface2
+    $btn.ForeColor = $script:pal.Text
+    $btn.FlatAppearance.BorderColor        = $script:pal.Border
+    $btn.FlatAppearance.BorderSize         = 1
+    $btn.FlatAppearance.MouseOverBackColor = $script:pal.BtnHover
+    $btn.FlatAppearance.MouseDownBackColor = $script:pal.BtnPress
+}
+
+function Apply-Theme($isDark) {
+    $script:isDark = $isDark
+    $script:pal    = if ($isDark) { $palettes.dark } else { $palettes.light }
+    Update-Brushes
+
+    $form.BackColor     = $script:pal.Bg
+    $panelList.BackColor = $script:pal.Border
+    $listBox.BackColor  = $script:pal.Surface
+    $sep.BackColor      = $script:pal.Border
+    $txtOut.BackColor   = $script:pal.Input
+    $txtOut.ForeColor   = $script:pal.Text
+
+    foreach ($lbl in @($lblTitulo, $lblOut, $lblFolder)) {
+        $lbl.BackColor = $script:pal.Bg;  $lbl.ForeColor = $script:pal.Text
+    }
+    $lblFolder.ForeColor = $script:pal.TextDim
+    $lblStatus.BackColor = $script:pal.Bg
+    $chkAbrir.BackColor  = $script:pal.Bg
+    $chkAbrir.ForeColor  = $script:pal.Text
+    $chkCerrar.BackColor = $script:pal.Bg
+    $chkCerrar.ForeColor = $script:pal.Text
+    $chkToc.BackColor    = $script:pal.Bg
+    $chkToc.ForeColor    = $script:pal.Text
+
+    foreach ($btn in $script:themedButtons) { Set-BtnStyle $btn }
+
+    $sunChar  = [char]0x25CB
+    $moonChar = [char]0x25CF
+    $btnTema.Text = if ($isDark) { "$sunChar Claro" } else { "$moonChar Oscuro" }
+
+    try {
+        $dv = if ($isDark) { 1 } else { 0 }
+        [void][DwmApi]::DwmSetWindowAttribute($form.Handle, 20, [ref]$dv, 4)
+        [void][DwmApi]::DwmSetWindowAttribute($form.Handle, 19, [ref]$dv, 4)
+    } catch {}
+
+    $listBox.Invalidate()
+    $form.Refresh()
+    Save-Config
+}
+
+# Unicode via escape
+$arrowUp    = [char]0x2191
+$arrowDown  = [char]0x2193
+$enye       = [char]0x00F1
+$sunChar    = [char]0x25CB
+$moonChar   = [char]0x25CF
+$checkChar  = [char]0x2713
 
 # Form
 $form = New-Object System.Windows.Forms.Form
@@ -157,24 +434,25 @@ $form.ClientSize      = New-Object System.Drawing.Size(560, 420)
 $form.StartPosition   = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox     = $false
-$form.BackColor       = $clrBg
-$form.ForeColor       = $clrText
+$form.BackColor       = $script:pal.Bg
+$form.ForeColor       = $script:pal.Text
 $form.Font            = New-Object System.Drawing.Font("Segoe UI", 9)
 
 $form.Add_HandleCreated({
     param($s, $e)
     try {
-        $dark = 1
-        [void][DwmApi]::DwmSetWindowAttribute($s.Handle, 20, [ref]$dark, 4)
-        [void][DwmApi]::DwmSetWindowAttribute($s.Handle, 19, [ref]$dark, 4)
+        $dv = if ($script:isDark) { 1 } else { 0 }
+        [void][DwmApi]::DwmSetWindowAttribute($s.Handle, 20, [ref]$dv, 4)
+        [void][DwmApi]::DwmSetWindowAttribute($s.Handle, 19, [ref]$dv, 4)
     } catch {}
 })
 
 $form.Add_FormClosed({
-    $script:brText.Dispose();   $script:brWhite.Dispose()
-    $script:brRow1.Dispose();   $script:brRow2.Dispose()
-    $script:brSelBg.Dispose();  $script:brAccent.Dispose()
-    $script:sfVCenter.Dispose()
+    $timerClose.Stop()
+    $timerClose.Dispose()
+    foreach ($b in @($script:brText, $script:brSelText, $script:brRow1,
+                     $script:brRow2, $script:brSelBg, $script:brAccent)) { $b.Dispose() }
+    $script:sfVC.Dispose()
 })
 
 # Titulo
@@ -183,17 +461,33 @@ $n = $files.Count;  $sufijo = if ($n -ne 1) { 's' } else { '' }
 $lblTitulo = New-Object System.Windows.Forms.Label
 $lblTitulo.Text      = "$n PDF$sufijo - usa $arrowUp $arrowDown o arrastra para reordenar:"
 $lblTitulo.Location  = New-Object System.Drawing.Point(12, 10)
-$lblTitulo.Size      = New-Object System.Drawing.Size(490, 16)
-$lblTitulo.BackColor = $clrBg
-$lblTitulo.ForeColor = $clrText
+$lblTitulo.Size      = New-Object System.Drawing.Size(300, 16)
+$lblTitulo.BackColor = $script:pal.Bg
+$lblTitulo.ForeColor = $script:pal.Text
 
-# ListBox con borde via panel contenedor (1px del color de borde)
+# Boton agregar PDF (top-right, antes del tema)
+$btnAgregar = New-Object System.Windows.Forms.Button
+$btnAgregar.Text     = "+ A" + $enye + "adir PDF..."
+$btnAgregar.Location = New-Object System.Drawing.Point(318, 5)
+$btnAgregar.Size     = New-Object System.Drawing.Size(122, 22)
+$btnAgregar.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
+Set-BtnStyle $btnAgregar
+
+# Boton tema (top-right)
+$btnTema = New-Object System.Windows.Forms.Button
+$btnTema.Text     = if ($script:isDark) { "$sunChar Claro" } else { "$moonChar Oscuro" }
+$btnTema.Location = New-Object System.Drawing.Point(448, 5)
+$btnTema.Size     = New-Object System.Drawing.Size(100, 22)
+$btnTema.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
+Set-BtnStyle $btnTema
+
+# ListBox + panel borde
 $listBox = New-Object System.Windows.Forms.ListBox
 $listBox.Font           = New-Object System.Drawing.Font("Segoe UI", 10)
 $listBox.IntegralHeight = $false
 $listBox.AllowDrop      = $true
-$listBox.BackColor      = $clrSurface
-$listBox.ForeColor      = $clrText
+$listBox.BackColor      = $script:pal.Surface
+$listBox.ForeColor      = $script:pal.Text
 $listBox.BorderStyle    = "None"
 $listBox.DrawMode       = [System.Windows.Forms.DrawMode]::OwnerDrawFixed
 $listBox.ItemHeight     = 30
@@ -203,7 +497,7 @@ $listBox.Size           = New-Object System.Drawing.Size(468, 200)
 $panelList = New-Object System.Windows.Forms.Panel
 $panelList.Location  = New-Object System.Drawing.Point(11, 29)
 $panelList.Size      = New-Object System.Drawing.Size(470, 202)
-$panelList.BackColor = $clrBorder
+$panelList.BackColor = $script:pal.Border
 $panelList.Padding   = New-Object System.Windows.Forms.Padding(1)
 $panelList.Controls.Add($listBox)
 
@@ -213,49 +507,53 @@ $btnUp.Text     = $arrowUp
 $btnUp.Location = New-Object System.Drawing.Point(490, 30)
 $btnUp.Size     = New-Object System.Drawing.Size(58, 38)
 $btnUp.Font     = New-Object System.Drawing.Font("Segoe UI", 14)
-Set-DarkButton $btnUp
+Set-BtnStyle $btnUp
 
 $btnDown = New-Object System.Windows.Forms.Button
 $btnDown.Text     = $arrowDown
 $btnDown.Location = New-Object System.Drawing.Point(490, 74)
 $btnDown.Size     = New-Object System.Drawing.Size(58, 38)
 $btnDown.Font     = New-Object System.Drawing.Font("Segoe UI", 14)
-Set-DarkButton $btnDown
+Set-BtnStyle $btnDown
 
-# Botones ordenar / gestionar (fila unica)
+# Botones ordenar / gestionar
 $btnNombre = New-Object System.Windows.Forms.Button
 $btnNombre.Text     = "Nombre"
 $btnNombre.Location = New-Object System.Drawing.Point(12, 244)
 $btnNombre.Size     = New-Object System.Drawing.Size(80, 28)
-Set-DarkButton $btnNombre
+Set-BtnStyle $btnNombre
 
 $btnFecha = New-Object System.Windows.Forms.Button
 $btnFecha.Text     = "Fecha"
 $btnFecha.Location = New-Object System.Drawing.Point(98, 244)
 $btnFecha.Size     = New-Object System.Drawing.Size(80, 28)
-Set-DarkButton $btnFecha
+Set-BtnStyle $btnFecha
 
 $btnTamano = New-Object System.Windows.Forms.Button
 $btnTamano.Text     = "Tama" + $enye + "o"
 $btnTamano.Location = New-Object System.Drawing.Point(184, 244)
 $btnTamano.Size     = New-Object System.Drawing.Size(80, 28)
-Set-DarkButton $btnTamano
+Set-BtnStyle $btnTamano
 
 $btnInvertir = New-Object System.Windows.Forms.Button
 $btnInvertir.Text     = "Invertir"
 $btnInvertir.Location = New-Object System.Drawing.Point(270, 244)
 $btnInvertir.Size     = New-Object System.Drawing.Size(76, 28)
-Set-DarkButton $btnInvertir
+Set-BtnStyle $btnInvertir
 
 $btnEliminar = New-Object System.Windows.Forms.Button
 $btnEliminar.Text     = "Eliminar  [Supr]"
 $btnEliminar.Location = New-Object System.Drawing.Point(364, 244)
 $btnEliminar.Size     = New-Object System.Drawing.Size(184, 28)
-Set-DarkButton $btnEliminar
+Set-BtnStyle $btnEliminar
 
-# Separador (label plano con color de borde como fondo)
+# Lista de botones que Apply-Theme debe actualizar (excluye Combinar)
+$script:themedButtons = @($btnAgregar, $btnTema, $btnUp, $btnDown, $btnNombre, $btnFecha,
+                          $btnTamano, $btnInvertir, $btnEliminar)
+
+# Separador
 $sep = New-Object System.Windows.Forms.Label
-$sep.BackColor   = $clrBorder
+$sep.BackColor   = $script:pal.Border
 $sep.BorderStyle = "None"
 $sep.Location    = New-Object System.Drawing.Point(12, 286)
 $sep.Size        = New-Object System.Drawing.Size(536, 1)
@@ -265,82 +563,98 @@ $lblOut = New-Object System.Windows.Forms.Label
 $lblOut.Text      = "Nombre del archivo de salida:"
 $lblOut.Location  = New-Object System.Drawing.Point(12, 296)
 $lblOut.Size      = New-Object System.Drawing.Size(210, 16)
-$lblOut.BackColor = $clrBg
-$lblOut.ForeColor = $clrText
+$lblOut.BackColor = $script:pal.Bg
+$lblOut.ForeColor = $script:pal.Text
 
 $txtOut = New-Object System.Windows.Forms.TextBox
 $txtOut.Text        = "combinado.pdf"
 $txtOut.Location    = New-Object System.Drawing.Point(12, 315)
 $txtOut.Size        = New-Object System.Drawing.Size(348, 24)
-$txtOut.BackColor   = $clrSurface2
-$txtOut.ForeColor   = $clrText
+$txtOut.BackColor   = $script:pal.Input
+$txtOut.ForeColor   = $script:pal.Text
 $txtOut.BorderStyle = "FixedSingle"
 
-# Checkbox abrir al terminar
+# Checkboxes (estado desde config)
 $chkAbrir = New-Object System.Windows.Forms.CheckBox
 $chkAbrir.Text      = "Abrir PDF al terminar"
-$chkAbrir.Checked   = $true
+$chkAbrir.Checked   = $cfg.AbrirAlTerminar
 $chkAbrir.Location  = New-Object System.Drawing.Point(12, 346)
 $chkAbrir.Size      = New-Object System.Drawing.Size(180, 20)
-$chkAbrir.ForeColor = $clrText
-$chkAbrir.BackColor = $clrBg
+$chkAbrir.ForeColor = $script:pal.Text
+$chkAbrir.BackColor = $script:pal.Bg
 
-# Boton Combinar (acento azul)
+$chkCerrar = New-Object System.Windows.Forms.CheckBox
+$chkCerrar.Text      = "Autocerrar al terminar (5s)"
+$chkCerrar.Checked   = $cfg.CerrarAlTerminar
+$chkCerrar.Location  = New-Object System.Drawing.Point(200, 346)
+$chkCerrar.Size      = New-Object System.Drawing.Size(210, 20)
+$chkCerrar.ForeColor = $script:pal.Text
+$chkCerrar.BackColor = $script:pal.Bg
+
+$chkToc = New-Object System.Windows.Forms.CheckBox
+$chkToc.Text      = "Generar " + ([char]0x00ED) + "ndice"
+$chkToc.Checked   = $cfg.GenerarIndice
+$chkToc.Location  = New-Object System.Drawing.Point(416, 346)
+$chkToc.Size      = New-Object System.Drawing.Size(132, 20)
+$chkToc.ForeColor = $script:pal.Text
+$chkToc.BackColor = $script:pal.Bg
+
+# Boton Combinar
 $btnCombinar = New-Object System.Windows.Forms.Button
 $btnCombinar.Text      = "Combinar"
 $btnCombinar.Location  = New-Object System.Drawing.Point(368, 311)
 $btnCombinar.Size      = New-Object System.Drawing.Size(180, 32)
 $btnCombinar.FlatStyle = "Flat"
-$btnCombinar.BackColor = $clrAccent
+$btnCombinar.BackColor = $script:pal.Accent
 $btnCombinar.ForeColor = [System.Drawing.Color]::White
 $btnCombinar.FlatAppearance.BorderSize         = 0
-$btnCombinar.FlatAppearance.MouseOverBackColor = $clrAccHover
-$btnCombinar.FlatAppearance.MouseDownBackColor = $clrAccPress
+$btnCombinar.FlatAppearance.MouseOverBackColor = $script:pal.AccHover
+$btnCombinar.FlatAppearance.MouseDownBackColor = $script:pal.AccPress
 $form.AcceptButton = $btnCombinar
 
 # Etiqueta destino
 $lblFolder = New-Object System.Windows.Forms.Label
-$lblFolder.Location  = New-Object System.Drawing.Point(12, 400)
+$lblFolder.Location  = New-Object System.Drawing.Point(12, 392)
 $lblFolder.Size      = New-Object System.Drawing.Size(536, 14)
-$lblFolder.BackColor = $clrBg
-$lblFolder.ForeColor = $clrTextDim
+$lblFolder.BackColor = $script:pal.Bg
+$lblFolder.ForeColor = $script:pal.TextDim
 $lblFolder.Font      = New-Object System.Drawing.Font("Segoe UI", 7.5)
+
+# Label de estado (resultado de la operacion)
+$lblStatus = New-Object System.Windows.Forms.Label
+$lblStatus.Location  = New-Object System.Drawing.Point(12, 370)
+$lblStatus.Size      = New-Object System.Drawing.Size(536, 16)
+$lblStatus.BackColor = $script:pal.Bg
+$lblStatus.ForeColor = $script:pal.TextDim
+$lblStatus.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
+$lblStatus.Text      = ""
+
+# Timer para autocerrar tras combinar
+$timerClose          = New-Object System.Windows.Forms.Timer
+$timerClose.Interval = 1000
 
 # Owner draw del ListBox
 $listBox.Add_DrawItem({
     param($s, $e)
     if ($e.Index -lt 0 -or $e.Index -ge $listBox.Items.Count) { return }
-
-    $selected = $e.State -band [System.Windows.Forms.DrawItemState]::Selected
-
-    # Fondo de fila
-    $bgBrush = if ($selected)            { $script:brSelBg }
-               elseif ($e.Index % 2 -eq 0) { $script:brRow1  }
-               else                        { $script:brRow2  }
-    $e.Graphics.FillRectangle($bgBrush, $e.Bounds)
-
-    # Barra de acento izquierda en fila seleccionada
-    if ($selected) {
+    $sel = $e.State -band [System.Windows.Forms.DrawItemState]::Selected
+    $bg  = if ($sel) { $script:brSelBg } elseif ($e.Index % 2 -eq 0) { $script:brRow1 } else { $script:brRow2 }
+    $e.Graphics.FillRectangle($bg, $e.Bounds)
+    if ($sel) {
         $bar = New-Object System.Drawing.Rectangle($e.Bounds.X, $e.Bounds.Y, 3, $e.Bounds.Height)
         $e.Graphics.FillRectangle($script:brAccent, $bar)
     }
-
-    # Texto centrado verticalmente con padding izquierdo
-    $txtBrush = if ($selected) { $script:brWhite } else { $script:brText }
-    $pad      = 12
-    $txtRect  = New-Object System.Drawing.RectangleF(
-        ($e.Bounds.X + $pad), $e.Bounds.Y,
-        ($e.Bounds.Width - $pad), $e.Bounds.Height)
-    $e.Graphics.DrawString($listBox.Items[$e.Index], $listBox.Font, $txtBrush, $txtRect, $script:sfVCenter)
+    $fg      = if ($sel) { $script:brSelText } else { $script:brText }
+    $txtRect = New-Object System.Drawing.RectangleF(($e.Bounds.X + 12), $e.Bounds.Y, ($e.Bounds.Width - 12), $e.Bounds.Height)
+    $e.Graphics.DrawString($listBox.Items[$e.Index], $listBox.Font, $fg, $txtRect, $script:sfVC)
 })
 
 # Tooltips
 $tip = New-Object System.Windows.Forms.ToolTip
-$tip.AutoPopDelay = 6000
-$tip.InitialDelay = 600
-$tip.ReshowDelay  = 300
+$tip.AutoPopDelay = 6000;  $tip.InitialDelay = 600;  $tip.ReshowDelay = 300
 
-$tip.SetToolTip($listBox,     "Selecciona un elemento y usa los botones, o arrastralo directamente")
+$tip.SetToolTip($listBox,     "Selecciona un elemento y usa los botones, o arrastralo directamente. Arrastra ficheros desde el explorador para agregarlos")
+$tip.SetToolTip($btnAgregar,  "Agregar mas ficheros PDF a la lista mediante dialogo de seleccion")
 $tip.SetToolTip($btnUp,       "Subir el PDF seleccionado una posicion")
 $tip.SetToolTip($btnDown,     "Bajar el PDF seleccionado una posicion")
 $tip.SetToolTip($btnNombre,   "Ordenar alfabeticamente por nombre de archivo")
@@ -350,17 +664,22 @@ $tip.SetToolTip($btnInvertir, "Invertir el orden actual de la lista")
 $tip.SetToolTip($btnEliminar, "Quitar el PDF seleccionado de la lista (no borra el archivo del disco)")
 $tip.SetToolTip($txtOut,      "Nombre del archivo resultante. Se guarda en la carpeta del primer PDF")
 $tip.SetToolTip($chkAbrir,    "Abrir el PDF combinado con el visor predeterminado al terminar")
+$tip.SetToolTip($chkCerrar,   "Cerrar la ventana automaticamente 5 segundos despues de combinar")
+$tip.SetToolTip($chkToc,      "Agregar pagina de indice al inicio con los nombres de archivo y la pagina donde empieza cada uno, mas marcadores de navegacion en el panel de marcadores del visor PDF")
 $tip.SetToolTip($btnCombinar, "Combinar todos los PDFs en el orden mostrado")
+$tip.SetToolTip($btnTema,     "Cambiar entre tema oscuro y claro (se recuerda para proximas sesiones)")
 
-# Poblar lista
+# Poblar lista y ordenar por nombre por defecto
 foreach ($f in $files) {
     [void]$listBox.Items.Add((Get-DisplayName $f.FullName))
     [void]$script:rutas.Add($f.FullName)
 }
 $listBox.SelectedIndex = 0
 Refresh-Folder
+Sort-Lista 'nombre'
+$txtOut.Text = [System.IO.Path]::GetFileNameWithoutExtension($script:rutas[0]) + "_merged.pdf"
 
-# Eventos: Up / Down
+# Eventos
 $btnUp.Add_Click({
     $i = $listBox.SelectedIndex
     if ($i -gt 0) { Swap-Item $i ($i-1); $listBox.SelectedIndex = $i-1; Refresh-Folder }
@@ -369,20 +688,45 @@ $btnDown.Add_Click({
     $i = $listBox.SelectedIndex
     if ($i -ge 0 -and $i -lt $listBox.Items.Count-1) { Swap-Item $i ($i+1); $listBox.SelectedIndex = $i+1; Refresh-Folder }
 })
-
-# Eventos: ordenar / invertir / eliminar
 $btnNombre.Add_Click(   { Sort-Lista 'nombre' })
 $btnFecha.Add_Click(    { Sort-Lista 'fecha'  })
 $btnTamano.Add_Click(   { Sort-Lista 'tamano' })
 $btnInvertir.Add_Click( { Invertir-Lista      })
 $btnEliminar.Add_Click( { Remove-Selected     })
 
+$btnAgregar.Add_Click({
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Title      = "Seleccionar PDFs para agregar"
+    $dlg.Filter     = "PDF (*.pdf)|*.pdf"
+    $dlg.Multiselect = $true
+    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        Add-Files $dlg.FileNames
+    }
+    $dlg.Dispose()
+})
+
+$btnTema.Add_Click({ Apply-Theme (-not $script:isDark) })
+
+$timerClose.Add_Tick({
+    $script:countdown--
+    if ($script:countdown -le 0) {
+        $timerClose.Stop()
+        $form.Close()
+    } else {
+        $lblStatus.Text = "$(([char]0x2713)) Combinado. Cerrando en $($script:countdown)s..."
+    }
+})
+
+$chkAbrir.Add_CheckedChanged({  Save-Config })
+$chkCerrar.Add_CheckedChanged({ Save-Config })
+$chkToc.Add_CheckedChanged({   Save-Config })
+
 $listBox.Add_KeyDown({
     param($s, $e)
     if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Delete) { Remove-Selected }
 })
 
-# Drag & drop interno
+# Drag & drop
 $listBox.Add_MouseDown({
     param($s, $e)
     if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
@@ -403,21 +747,34 @@ $listBox.Add_MouseMove({
     }
 })
 $listBox.Add_DragOver({
-    param($s, $e); $e.Effect = [System.Windows.Forms.DragDropEffects]::Move
+    param($s, $e)
+    if ($e.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+        $e.Effect = [System.Windows.Forms.DragDropEffects]::Copy
+    } else {
+        $e.Effect = [System.Windows.Forms.DragDropEffects]::Move
+    }
 })
 $listBox.Add_DragDrop({
     param($s, $e)
-    $pt   = $listBox.PointToClient([System.Windows.Forms.Cursor]::Position)
-    $to   = $listBox.IndexFromPoint($pt)
-    if ($to -lt 0) { $to = $listBox.Items.Count }
-    $from = $script:dragFromIndex
-    if ($from -ge 0 -and $from -ne $to) {
-        Move-Item $from $to
-        $at = if ($to -gt $from) { $to-1 } else { $to }
-        $listBox.SelectedIndex = [Math]::Min($at, $listBox.Items.Count-1)
-        Refresh-Folder
+    if ($e.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+        # Archivos externos arrastrados desde el explorador
+        $dropped = $e.Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
+        Add-Files $dropped
+        $script:dragFromIndex = -1
+    } else {
+        # Reordenado interno
+        $pt   = $listBox.PointToClient([System.Windows.Forms.Cursor]::Position)
+        $to   = $listBox.IndexFromPoint($pt)
+        if ($to -lt 0) { $to = $listBox.Items.Count }
+        $from = $script:dragFromIndex
+        if ($from -ge 0 -and $from -ne $to) {
+            Reorder-ListItem $from $to
+            $at = if ($to -gt $from) { $to-1 } else { $to }
+            $listBox.SelectedIndex = [Math]::Min($at, $listBox.Items.Count-1)
+            Refresh-Folder
+        }
+        $script:dragFromIndex = -1
     }
-    $script:dragFromIndex = -1
 })
 $listBox.Add_MouseUp({ $script:dragFromIndex = -1; $script:dragStartPos = $null })
 
@@ -426,49 +783,62 @@ $btnCombinar.Add_Click({
     $nombre = $txtOut.Text.Trim()
     if (-not $nombre) { $nombre = "combinado" }
     if ($nombre -notmatch '\.pdf$') { $nombre += ".pdf" }
-
-    $dirSalida  = [System.IO.Path]::GetDirectoryName($script:rutas[0])
+    $dirSalida  = $script:outputDir
     $rutaSalida = [System.IO.Path]::Combine($dirSalida, $nombre)
-
     if (-not (Test-Path $cpdfExe)) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "No se encontro cpdf.exe.`nEjecuta setup.bat primero.",
-            "Error", [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error)
+        [System.Windows.Forms.MessageBox]::Show("No se encontro cpdf.exe.`nEjecuta setup.bat primero.",
+            "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
         return
     }
     if (Test-Path $rutaSalida) {
-        $resp = [System.Windows.Forms.MessageBox]::Show(
-            "Ya existe '$nombre'. Sobreescribir?",
-            "Confirmar", [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Question)
+        $resp = [System.Windows.Forms.MessageBox]::Show("Ya existe '$nombre'. Sobreescribir?",
+            "Confirmar", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
         if ($resp -ne [System.Windows.Forms.DialogResult]::Yes) { return }
     }
+    # Si se pide indice, combinar primero en temporal y luego procesar
+    $cpdfTarget = if ($chkToc.Checked) {
+        $uid = [System.IO.Path]::GetRandomFileName() -replace '\.', ''
+        [System.IO.Path]::Combine($script:outputDir, "_cptmp_$uid.pdf")
+    } else { $rutaSalida }
 
     $argsCpdf = [System.Collections.ArrayList]@()
     foreach ($r in $script:rutas) { [void]$argsCpdf.Add($r) }
-    [void]$argsCpdf.Add("-o");  [void]$argsCpdf.Add($rutaSalida)
+    [void]$argsCpdf.Add("-o");  [void]$argsCpdf.Add($cpdfTarget)
     & $cpdfExe @argsCpdf 2>&1 | Out-Null
+
+    if ($chkToc.Checked -and (Test-Path $cpdfTarget)) {
+        $tocOk = Add-TocAndBookmarks $cpdfTarget $rutaSalida
+        if (-not $tocOk -and -not (Test-Path $rutaSalida)) {
+            # fallback: usar el combinado sin indice
+            try { [System.IO.File]::Move($cpdfTarget, $rutaSalida) } catch {}
+        } else {
+            if (Test-Path $cpdfTarget) { Remove-Item $cpdfTarget -Force -ErrorAction SilentlyContinue }
+        }
+    }
 
     if (Test-Path $rutaSalida) {
         if ($chkAbrir.Checked) { Start-Process $rutaSalida }
-        [System.Windows.Forms.MessageBox]::Show(
-            "Archivo generado:`n$rutaSalida",
-            "Listo", [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information)
-        $form.Close()
+        $colorOk = if ($script:isDark) { [System.Drawing.Color]::FromArgb(100, 220, 140) } `
+                                  else { [System.Drawing.Color]::FromArgb(0, 140, 50) }
+        $lblStatus.ForeColor = $colorOk
+        $btnCombinar.Enabled = $false
+        if ($chkCerrar.Checked) {
+            $script:countdown = 5
+            $lblStatus.Text = "$checkChar Combinado. Cerrando en $($script:countdown)s..."
+            $timerClose.Start()
+        } else {
+            $lblStatus.Text = "$checkChar Combinado correctamente."
+        }
     } else {
-        [System.Windows.Forms.MessageBox]::Show(
-            "No se pudo generar el archivo.`nVerifica que los PDFs no esten protegidos.",
-            "Error", [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error)
+        [System.Windows.Forms.MessageBox]::Show("No se pudo generar el archivo.`nVerifica que los PDFs no esten protegidos.",
+            "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
     }
 })
 
 # Mostrar
 $form.Controls.AddRange(@(
-    $lblTitulo, $panelList, $btnUp, $btnDown,
+    $lblTitulo, $btnAgregar, $btnTema, $panelList, $btnUp, $btnDown,
     $btnNombre, $btnFecha, $btnTamano, $btnInvertir, $btnEliminar,
-    $sep, $lblOut, $txtOut, $chkAbrir, $btnCombinar, $lblFolder
+    $sep, $lblOut, $txtOut, $chkAbrir, $chkCerrar, $chkToc, $btnCombinar, $lblStatus, $lblFolder
 ))
 [void]$form.ShowDialog()
