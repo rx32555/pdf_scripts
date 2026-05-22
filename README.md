@@ -33,6 +33,8 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 | `combinar_PDFs_drag_and_drop.bat` + `combinar_PDFs_gui.ps1` | Abre una ventana para reordenar los PDFs arrastrados (↑↓ manual, por nombre o por fecha) y los combina en un archivo nuevo |
 | `eliminar_paginas_drag_and_drop.bat` + `eliminar_paginas_gui.ps1` | Elimina o conserva páginas según un rango (`1,3,5-7` / `2-end` / `odd` / `even`). Botones rápidos para portada, última página, pares e impares. Opción de reemplazar el original o guardar como `_editado.pdf`. Opciones: abrir archivos resultantes al terminar (visible solo con ≤10 PDFs) y cerrar ventana automáticamente |
 
+> **Seguridad al reemplazar:** Los scripts etiquetados como `REEMPLAZA` no borran los archivos de forma permanente. Antes de sobreescribirlos, el PDF original es enviado a la Papelera de reciclaje de Windows con el sufijo `_original.pdf`. Si procesaste un archivo por error, puedes restaurarlo fácilmente desde allí sin generar conflictos.
+
 ## Uso
 
 **Drag & Drop** — Arrastrar uno o varios PDFs sobre el `.bat`.
