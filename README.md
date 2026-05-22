@@ -31,6 +31,7 @@ A partir de ahí los scripts funcionan sin conexión a internet.
 | `escala_grises_REEMPLAZA_drag_and_drop.bat` | Convierte el PDF a escala de grises y sobreescribe el original |
 | `dividir_paginas_drag_and_drop.bat` | Separa cada página en un archivo individual (`nombre_p1.pdf`, `nombre_p2.pdf`…) junto al original |
 | `combinar_PDFs_drag_and_drop.bat` + `combinar_PDFs_gui.ps1` | Abre una ventana para reordenar los PDFs arrastrados (↑↓ manual, por nombre o por fecha) y los combina en un archivo nuevo |
+| `eliminar_paginas_drag_and_drop.bat` + `eliminar_paginas_gui.ps1` | Elimina o conserva páginas según un rango (`1,3,5-7` / `2-end` / `odd` / `even`). Botones rápidos para portada, última página, pares e impares. Opción de reemplazar el original o guardar como `_editado.pdf`. Opciones: abrir archivos resultantes al terminar (visible solo con ≤10 PDFs) y cerrar ventana automáticamente |
 
 ## Uso
 
