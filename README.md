@@ -2,6 +2,8 @@
 
 Colección de scripts Windows (.bat) para operaciones sobre archivos PDF, usando [cpdf](http://www.coherentpdf.com/) como motor. Compatibles con drag & drop y con el menú contextual **Enviar a** de Windows.
 
+**Soporte bilingüe integrado:** La interfaz gráfica, los nombres de los accesos directos y los mensajes por consola se adaptan al idioma de tu preferencia (Español / Inglés).
+
 ## Requisitos
 
 - Windows 10 o superior
@@ -15,10 +17,11 @@ setup.bat
 ```
 
 Al ejecutarlo por primera vez:
-1. Descarga `cpdf.exe` en la carpeta `dependencias\`
-2. Descarga `7za.exe` (7-Zip portable) en la carpeta `dependencias\`
-3. Verifica si Ghostscript está instalado en el sistema; si no, descarga el instalador oficial y lo lanza — seguir el asistente dejando las opciones por defecto (la opción *Add to PATH* viene marcada, no cambiarla)
-4. Verifica los accesos directos en el menú **Enviar a**: crea o actualiza solo los que falten o apunten a una ruta incorrecta
+1. Te preguntará qué idioma prefieres (Español / Inglés). Toda la configuración visual y los accesos directos se adaptarán a esta elección. Puedes volver a ejecutar el `setup.bat` cuando quieras para cambiar de idioma.
+2. Descarga `cpdf.exe` en la carpeta `dependencias\`
+3. Descarga `7za.exe` (7-Zip portable) en la carpeta `dependencias\`
+4. Verifica si Ghostscript está instalado en el sistema; si no, descarga el instalador oficial y lo lanza — seguir el asistente dejando las opciones por defecto (la opción *Add to PATH* viene marcada, no cambiarla)
+5. Verifica los accesos directos en el menú **Enviar a**: limpia duplicados si cambiaste de idioma, y crea o actualiza los accesos directos.
 
 A partir de ahí los scripts funcionan sin conexión a internet.
 

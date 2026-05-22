@@ -1,8 +1,11 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+call "%~dp0locales\compiled_lang.bat"
+
 if "%~1"=="" (
-    echo Arrastra y suelta archivos PDF en este script.
+    echo !L_DRAG_DROP!
     pause
     exit /b
 )
@@ -16,6 +19,8 @@ for %%F in (%*) do (
         set "salida=%%~dpnF_temp.pdf"
         set "nombre=%%~nxF"
 
+        echo !L_PROCESSING! "%%~nxF"...
+
         "%CPDF%" -topright 17 -font Courier-Bold -font-size 14 -color "1.0 0.0 0.2" -add-text "!nombre!" "!entrada!" -o "!salida!"
 
         if exist "!salida!" (
@@ -25,12 +30,12 @@ for %%F in (%*) do (
             copy /Y "!salida!" "!entrada!" >nul
             del "!salida!"
             echo !entrada!>>"!listfile!"
-            echo Procesado: "%%~nxF"
+            echo !L_OK! "%%~nxF"
         ) else (
-            echo [ERROR] Fallo al procesar: %%~nxF
+            echo !L_ERR_PROCESS! "%%~nxF"
         )
     ) else (
-        echo Omitido ^(no es PDF^): "%%~nxF"
+        echo !L_SKIP_NOPDF!: "%%~nxF"
     )
 )
 
@@ -38,6 +43,6 @@ if exist "!listfile!" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0restore_selection.ps1" "!listfile!"
 )
 
-echo Proceso completado. Cerrando en 3 segundos...
+echo !L_DONE!
 timeout /nobreak /t 3 >nul
 exit /b

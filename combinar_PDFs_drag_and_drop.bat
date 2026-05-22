@@ -1,6 +1,10 @@
 @echo off
+chcp 65001 >nul
+setlocal enabledelayedexpansion
+call "%~dp0locales\compiled_lang.bat"
+
 if "%~1"=="" (
-    echo Arrastra y suelta archivos PDF en este script.
+    echo !L_DRAG_DROP!
     pause
     exit /b
 )

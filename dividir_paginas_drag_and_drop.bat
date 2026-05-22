@@ -1,8 +1,11 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+call "%~dp0locales\compiled_lang.bat"
+
 if "%~1"=="" (
-    echo Arrastra y suelta archivos PDF en este script.
+    echo !L_DRAG_DROP!
     pause
     exit /b
 )
@@ -20,18 +23,18 @@ for %%F in (%*) do (
         )
 
         if "!PAGES!"=="1" (
-            echo Omitido ^(solo 1 pagina^): "%%~nxF"
+            echo !L_SKIP_1PAGE!: "%%~nxF"
         ) else if "!PAGES!"=="0" (
-            echo [ERROR] No se pudo leer o archivo invalido: "%%~nxF"
+            echo !L_ERR_READ!: "%%~nxF"
         ) else (
             "!CPDF!" -split "!entrada!" -o "!basepath!_p%%d.pdf" >nul 2>&1
-            echo Procesado ^(!PAGES! paginas^): "%%~nxF"
+            echo !L_PROCESSED! ^(!PAGES! !L_PAGES!^): "%%~nxF"
         )
     ) else (
-        echo Omitido ^(no es PDF^): "%%~nxF"
+        echo !L_SKIP_NOPDF!: "%%~nxF"
     )
 )
 
-echo Proceso completado. Cerrando en 3 segundos...
+echo !L_DONE!
 timeout /nobreak /t 3 >nul
 exit /b

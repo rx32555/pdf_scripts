@@ -1,8 +1,11 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+call "%~dp0locales\compiled_lang.bat"
+
 if "%~1"=="" (
-    echo Arrastra y suelta archivos PDF en este script.
+    echo !L_DRAG_DROP!
     pause
     exit /b
 )
@@ -27,8 +30,7 @@ if "!GS_FOUND!"=="0" (
 )
 
 if "!GS_FOUND!"=="0" (
-    echo [ERROR] Ghostscript no encontrado en el sistema.
-    echo         Ejecuta setup.bat para instalarlo.
+    echo !L_NO_GS!
     pause
     exit /b 1
 )
@@ -37,8 +39,9 @@ for %%F in (%*) do (
     if /i "%%~xF"==".pdf" (
         set "entrada=%%~fF"
         set "salida=%%~dpnF_temp.pdf"
+        echo !L_PROCESSING! "%%~nxF"...
 
-        "!GS!" -sDEVICE=pdfwrite -sColorConversionStrategy=Gray -dProcessColorModel=/DeviceGray -dNOPAUSE -dQUIET -dBATCH -sOutputFile="!salida!" "!entrada!"
+        "!GS!" -sOutputFile="!salida!" -sDEVICE=pdfwrite -sColorConversionStrategy=Gray -dProcessColorModel=/DeviceGray -dCompatibilityLevel=1.4 -dNOPAUSE -dBATCH -dQUIET "!entrada!"
 
         if exist "!salida!" (
             set "FILE_BACKUP=%%~dpnF_original%%~xF"
@@ -47,12 +50,12 @@ for %%F in (%*) do (
             copy /Y "!salida!" "!entrada!" >nul
             del "!salida!"
             echo !entrada!>>"!listfile!"
-            echo Procesado: "%%~nxF"
+            echo !L_OK! %%~nxF
         ) else (
-            echo [ERROR] Fallo al procesar: %%~nxF
+            echo !L_ERR_PROCESS! %%~nxF
         )
     ) else (
-        echo Omitido ^(no es PDF^): "%%~nxF"
+        echo !L_SKIP_NOPDF!: "%%~nxF"
     )
 )
 
@@ -60,6 +63,6 @@ if exist "!listfile!" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0restore_selection.ps1" "!listfile!"
 )
 
-echo Proceso completado. Cerrando en 3 segundos...
+echo !L_DONE!
 timeout /nobreak /t 3 >nul
 exit /b

@@ -1,0 +1,8 @@
+- [x] 1. Hacer `combinar_PDFs_gui.ps1` redimensionable (Anchors y FormBorderStyle)
+- [x] 2. Hacer `eliminar_paginas_gui.ps1` redimensionable (Anchors y FormBorderStyle)
+- [x] 3. Mejorar detección de Ghostscript en `setup.bat`, `reducir_peso_...` y `escala_grises_...`
+- [x] 4. Implementar envío a papelera de reciclaje en los `.bat` de tipo REEMPLAZA
+- [x] 5. Probar y verificar los cambios
+- [x] 6. Evitar pérdida de selección de Windows Explorer en los scripts de reemplazo (`restore_selection.ps1` y uso de archivos temporales).
+- [x] 7. Hacer persistente el redimensionamiento de interfaces (guardar en JSON de configuración).
+- [x] 8. Omitir archivos de 1 sola página en la herramienta de división y silenciar warnings internos de cpdf.

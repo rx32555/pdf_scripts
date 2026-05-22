@@ -14,6 +14,19 @@ public class DwmApi {
 
 [void][System.Windows.Forms.Application]::EnableVisualStyles()
 
+function Load-Lang {
+    $localesDir = [System.IO.Path]::Combine($PSScriptRoot, "locales")
+    $configFile = [System.IO.Path]::Combine($localesDir, "lang_config.txt")
+    $lang = "en"
+    if (Test-Path $configFile) {
+        $lang = (Get-Content $configFile -Raw).Trim()
+    }
+    $jsonFile = [System.IO.Path]::Combine($localesDir, "$lang.json")
+    if (-not (Test-Path $jsonFile)) { $jsonFile = [System.IO.Path]::Combine($localesDir, "en.json") }
+    return Get-Content $jsonFile -Raw -Encoding UTF8 | ConvertFrom-Json
+}
+$script:langDict = Load-Lang
+
 # Archivos recibidos
 $files = $args |
     Where-Object { $_ -match '\.pdf$' -and (Test-Path $_ -PathType Leaf) } |
@@ -21,8 +34,8 @@ $files = $args |
 
 if ($files.Count -eq 0) {
     [System.Windows.Forms.MessageBox]::Show(
-        "No se recibieron archivos PDF.`nArrastra PDFs sobre el .bat para usarlo.",
-        "Sin archivos",
+        $script:langDict.L_GUI_NO_PDF,
+        "Error",
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Warning)
     exit
@@ -34,7 +47,7 @@ $configPath = [System.IO.Path]::Combine($PSScriptRoot, "combinar_PDFs_config.jso
 function Load-Config {
     if (Test-Path $configPath) {
         try {
-            $j = Get-Content $configPath -Raw | ConvertFrom-Json
+            $j = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
             return @{
                 AbrirAlTerminar  = [bool]$j.AbrirAlTerminar
                 TemaOscuro       = [bool]$j.TemaOscuro
@@ -55,8 +68,6 @@ function Save-Config {
             TemaOscuro       = $script:isDark
             CerrarAlTerminar = $chkCerrar.Checked
             GenerarIndice    = $chkToc.Checked
-            WindowWidth      = if ($form) { $form.ClientSize.Width } else { 560 }
-            WindowHeight     = if ($form) { $form.ClientSize.Height } else { 420 }
         } | ConvertTo-Json | Set-Content $configPath -Encoding UTF8
     } catch {}
 }
@@ -163,7 +174,7 @@ function Reorder-ListItem($from, $to) {
     $at = if ($to -gt $from) { $to - 1 } else { $to }
     $listBox.Items.Insert($at, $d);  $script:rutas.Insert($at, $r)
 }
-function Refresh-Folder { $lblFolder.Text = "Destino: " + $script:outputDir }
+function Refresh-Folder { $lblFolder.Text = $script:langDict.L_GUI_LBL_DEST + " " + $script:outputDir }
 function Remove-Selected {
     $i = $listBox.SelectedIndex
     if ($i -lt 0 -or $listBox.Items.Count -le 1) { return }
@@ -197,9 +208,8 @@ function Invertir-Lista {
 }
 function Update-TitleLabel {
     $n = $listBox.Items.Count
-    $sufijo = if ($n -ne 1) { 's' } else { '' }
     $up = [char]0x2191;  $dn = [char]0x2193
-    $lblTitulo.Text = "$n PDF$sufijo - usa $up $dn o arrastra para reordenar:"
+    $lblTitulo.Text = "$n $($script:langDict.L_GUI_LBL_TITLE_1) $up $dn $($script:langDict.L_GUI_LBL_TITLE_2)"
 }
 function Add-Files($paths) {
     $added = 0
@@ -316,8 +326,8 @@ function Add-TocAndBookmarks($combinedPdf, $outputPdf) {
     $gsExe = 'gswin64c.exe'
     if (-not (Get-Command $gsExe -ErrorAction SilentlyContinue)) {
         [System.Windows.Forms.MessageBox]::Show(
-            "Ghostscript no encontrado en PATH.`nEjecuta setup.bat para instalarlo.",
-            "Indice: error", [System.Windows.Forms.MessageBoxButtons]::OK,
+            $script:langDict.L_GUI_ERR_GS,
+            "Error", [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning)
         return $false
     }
@@ -353,8 +363,8 @@ function Add-TocAndBookmarks($combinedPdf, $outputPdf) {
 
         if (-not (Test-Path $outputPdf)) {
             [System.Windows.Forms.MessageBox]::Show(
-                "Ghostscript no pudo generar el indice.`n`n$($gsOut -join "`n")",
-                "Indice: error GS", [System.Windows.Forms.MessageBoxButtons]::OK,
+                $script:langDict.L_GUI_ERR_GS_FAIL + "`n`n$($gsOut -join "`n")",
+                "Error GS", [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Warning)
             return $false
         }
@@ -362,7 +372,7 @@ function Add-TocAndBookmarks($combinedPdf, $outputPdf) {
 
     } catch {
         [System.Windows.Forms.MessageBox]::Show(
-            "Error generando indice: $_", "Indice: error",
+            $script:langDict.L_GUI_ERR_INDEX + " $_", "Error",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning)
         return $false
@@ -408,9 +418,7 @@ function Apply-Theme($isDark) {
 
     foreach ($btn in $script:themedButtons) { Set-BtnStyle $btn }
 
-    $sunChar  = [char]0x25CB
-    $moonChar = [char]0x25CF
-    $btnTema.Text = if ($isDark) { "$sunChar Claro" } else { "$moonChar Oscuro" }
+    $btnTema.Text = if ($isDark) { "$sunChar $($script:langDict.L_GUI_BTN_LIGHT)" } else { "$moonChar $($script:langDict.L_GUI_BTN_DARK)" }
 
     try {
         $dv = if ($isDark) { 1 } else { 0 }
@@ -433,8 +441,8 @@ $checkChar  = [char]0x2713
 
 # Form
 $form = New-Object System.Windows.Forms.Form
-$form.Text            = "Combinar PDFs"
-$form.ClientSize      = New-Object System.Drawing.Size($cfg.WindowWidth, $cfg.WindowHeight)
+$form.Text            = $script:langDict.L_GUI_TITLE_MERGE
+$form.ClientSize      = New-Object System.Drawing.Size(560, 420)
 $form.StartPosition   = "CenterScreen"
 $form.FormBorderStyle = "Sizable"
 $form.MinimumSize     = New-Object System.Drawing.Size(560, 420)
@@ -465,7 +473,7 @@ $form.Add_FormClosed({
 $n = $files.Count;  $sufijo = if ($n -ne 1) { 's' } else { '' }
 
 $lblTitulo = New-Object System.Windows.Forms.Label
-$lblTitulo.Text      = "$n PDF$sufijo - usa $arrowUp $arrowDown o arrastra para reordenar:"
+$lblTitulo.Text      = "$n $($script:langDict.L_GUI_LBL_TITLE_1) $arrowUp $arrowDown $($script:langDict.L_GUI_LBL_TITLE_2)"
 $lblTitulo.Location  = New-Object System.Drawing.Point(12, 10)
 $lblTitulo.Size      = New-Object System.Drawing.Size(300, 16)
 $lblTitulo.BackColor = $script:pal.Bg
@@ -473,7 +481,7 @@ $lblTitulo.ForeColor = $script:pal.Text
 
 # Boton agregar PDF (top-right, antes del tema)
 $btnAgregar = New-Object System.Windows.Forms.Button
-$btnAgregar.Text     = "+ A" + $enye + "adir PDF..."
+$btnAgregar.Text     = $script:langDict.L_GUI_BTN_ADD
 $btnAgregar.Location = New-Object System.Drawing.Point(318, 5)
 $btnAgregar.Size     = New-Object System.Drawing.Size(122, 22)
 $btnAgregar.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -482,7 +490,7 @@ Set-BtnStyle $btnAgregar
 
 # Boton tema (top-right)
 $btnTema = New-Object System.Windows.Forms.Button
-$btnTema.Text     = if ($script:isDark) { "$sunChar Claro" } else { "$moonChar Oscuro" }
+$btnTema.Text     = if ($script:isDark) { "$sunChar $($script:langDict.L_GUI_BTN_LIGHT)" } else { "$moonChar $($script:langDict.L_GUI_BTN_DARK)" }
 $btnTema.Location = New-Object System.Drawing.Point(448, 5)
 $btnTema.Size     = New-Object System.Drawing.Size(100, 22)
 $btnTema.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -530,35 +538,35 @@ Set-BtnStyle $btnDown
 
 # Botones ordenar / gestionar
 $btnNombre = New-Object System.Windows.Forms.Button
-$btnNombre.Text     = "Nombre"
+$btnNombre.Text     = $script:langDict.L_GUI_BTN_NAME
 $btnNombre.Location = New-Object System.Drawing.Point(12, 244)
 $btnNombre.Size     = New-Object System.Drawing.Size(80, 28)
 $btnNombre.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnNombre
 
 $btnFecha = New-Object System.Windows.Forms.Button
-$btnFecha.Text     = "Fecha"
+$btnFecha.Text     = $script:langDict.L_GUI_BTN_DATE
 $btnFecha.Location = New-Object System.Drawing.Point(98, 244)
 $btnFecha.Size     = New-Object System.Drawing.Size(80, 28)
 $btnFecha.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnFecha
 
 $btnTamano = New-Object System.Windows.Forms.Button
-$btnTamano.Text     = "Tama" + $enye + "o"
+$btnTamano.Text     = $script:langDict.L_GUI_BTN_SIZE
 $btnTamano.Location = New-Object System.Drawing.Point(184, 244)
 $btnTamano.Size     = New-Object System.Drawing.Size(80, 28)
 $btnTamano.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnTamano
 
 $btnInvertir = New-Object System.Windows.Forms.Button
-$btnInvertir.Text     = "Invertir"
+$btnInvertir.Text     = $script:langDict.L_GUI_BTN_INVERT
 $btnInvertir.Location = New-Object System.Drawing.Point(270, 244)
 $btnInvertir.Size     = New-Object System.Drawing.Size(76, 28)
 $btnInvertir.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnInvertir
 
 $btnEliminar = New-Object System.Windows.Forms.Button
-$btnEliminar.Text     = "Eliminar  [Supr]"
+$btnEliminar.Text     = $script:langDict.L_GUI_BTN_DEL
 $btnEliminar.Location = New-Object System.Drawing.Point(364, 244)
 $btnEliminar.Size     = New-Object System.Drawing.Size(184, 28)
 $btnEliminar.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
@@ -578,7 +586,7 @@ $sep.Anchor      = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Wind
 
 # Nombre de salida
 $lblOut = New-Object System.Windows.Forms.Label
-$lblOut.Text      = "Nombre del archivo de salida:"
+$lblOut.Text      = $script:langDict.L_GUI_LBL_OUT
 $lblOut.Location  = New-Object System.Drawing.Point(12, 296)
 $lblOut.Size      = New-Object System.Drawing.Size(210, 16)
 $lblOut.BackColor = $script:pal.Bg
@@ -596,7 +604,7 @@ $txtOut.Anchor      = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.W
 
 # Checkboxes (estado desde config)
 $chkAbrir = New-Object System.Windows.Forms.CheckBox
-$chkAbrir.Text      = "Abrir PDF al terminar"
+$chkAbrir.Text      = $script:langDict.L_GUI_CHK_OPEN
 $chkAbrir.Checked   = $cfg.AbrirAlTerminar
 $chkAbrir.Location  = New-Object System.Drawing.Point(12, 346)
 $chkAbrir.Size      = New-Object System.Drawing.Size(180, 20)
@@ -605,7 +613,7 @@ $chkAbrir.BackColor = $script:pal.Bg
 $chkAbrir.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $chkCerrar = New-Object System.Windows.Forms.CheckBox
-$chkCerrar.Text      = "Autocerrar al terminar (5s)"
+$chkCerrar.Text      = $script:langDict.L_GUI_CHK_CLOSE
 $chkCerrar.Checked   = $cfg.CerrarAlTerminar
 $chkCerrar.Location  = New-Object System.Drawing.Point(200, 346)
 $chkCerrar.Size      = New-Object System.Drawing.Size(210, 20)
@@ -614,7 +622,7 @@ $chkCerrar.BackColor = $script:pal.Bg
 $chkCerrar.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $chkToc = New-Object System.Windows.Forms.CheckBox
-$chkToc.Text      = "Generar " + ([char]0x00ED) + "ndice"
+$chkToc.Text      = $script:langDict.L_GUI_CHK_TOC
 $chkToc.Checked   = $cfg.GenerarIndice
 $chkToc.Location  = New-Object System.Drawing.Point(416, 346)
 $chkToc.Size      = New-Object System.Drawing.Size(132, 20)
@@ -624,7 +632,7 @@ $chkToc.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Win
 
 # Boton Combinar
 $btnCombinar = New-Object System.Windows.Forms.Button
-$btnCombinar.Text      = "Combinar"
+$btnCombinar.Text      = $script:langDict.L_GUI_BTN_MERGE
 $btnCombinar.Location  = New-Object System.Drawing.Point(368, 311)
 $btnCombinar.Size      = New-Object System.Drawing.Size(180, 32)
 $btnCombinar.FlatStyle = "Flat"
@@ -679,21 +687,21 @@ $listBox.Add_DrawItem({
 $tip = New-Object System.Windows.Forms.ToolTip
 $tip.AutoPopDelay = 6000;  $tip.InitialDelay = 600;  $tip.ReshowDelay = 300
 
-$tip.SetToolTip($listBox,     "Selecciona un elemento y usa los botones, o arrastralo directamente. Arrastra ficheros desde el explorador para agregarlos")
-$tip.SetToolTip($btnAgregar,  "Agregar mas ficheros PDF a la lista mediante dialogo de seleccion")
-$tip.SetToolTip($btnUp,       "Subir el PDF seleccionado una posicion")
-$tip.SetToolTip($btnDown,     "Bajar el PDF seleccionado una posicion")
-$tip.SetToolTip($btnNombre,   "Ordenar alfabeticamente por nombre de archivo")
-$tip.SetToolTip($btnFecha,    "Ordenar por fecha de modificacion (mas antiguo primero)")
-$tip.SetToolTip($btnTamano,   "Ordenar por tamano de archivo (mas pequeno primero)")
-$tip.SetToolTip($btnInvertir, "Invertir el orden actual de la lista")
-$tip.SetToolTip($btnEliminar, "Quitar el PDF seleccionado de la lista (no borra el archivo del disco)")
-$tip.SetToolTip($txtOut,      "Nombre del archivo resultante. Se guarda en la carpeta del primer PDF")
-$tip.SetToolTip($chkAbrir,    "Abrir el PDF combinado con el visor predeterminado al terminar")
-$tip.SetToolTip($chkCerrar,   "Cerrar la ventana automaticamente 5 segundos despues de combinar")
-$tip.SetToolTip($chkToc,      "Agregar pagina de indice al inicio con los nombres de archivo y la pagina donde empieza cada uno, mas marcadores de navegacion en el panel de marcadores del visor PDF")
-$tip.SetToolTip($btnCombinar, "Combinar todos los PDFs en el orden mostrado")
-$tip.SetToolTip($btnTema,     "Cambiar entre tema oscuro y claro (se recuerda para proximas sesiones)")
+$tip.SetToolTip($listBox,     $script:langDict.L_GUI_TIP_LIST)
+$tip.SetToolTip($btnAgregar,  $script:langDict.L_GUI_TIP_ADD)
+$tip.SetToolTip($btnUp,       $script:langDict.L_GUI_TIP_UP)
+$tip.SetToolTip($btnDown,     $script:langDict.L_GUI_TIP_DOWN)
+$tip.SetToolTip($btnNombre,   $script:langDict.L_GUI_TIP_NAME)
+$tip.SetToolTip($btnFecha,    $script:langDict.L_GUI_TIP_DATE)
+$tip.SetToolTip($btnTamano,   $script:langDict.L_GUI_TIP_SIZE)
+$tip.SetToolTip($btnInvertir, $script:langDict.L_GUI_TIP_INVERT)
+$tip.SetToolTip($btnEliminar, $script:langDict.L_GUI_TIP_DEL)
+$tip.SetToolTip($txtOut,      $script:langDict.L_GUI_TIP_OUT)
+$tip.SetToolTip($chkAbrir,    $script:langDict.L_GUI_TIP_OPEN)
+$tip.SetToolTip($chkCerrar,   $script:langDict.L_GUI_TIP_CLOSE)
+$tip.SetToolTip($chkToc,      $script:langDict.L_GUI_TIP_TOC)
+$tip.SetToolTip($btnCombinar, $script:langDict.L_GUI_TIP_MERGE)
+$tip.SetToolTip($btnTema,     $script:langDict.L_GUI_TIP_THEME)
 
 # Poblar lista y ordenar por nombre por defecto
 foreach ($f in $files) {
@@ -722,7 +730,7 @@ $btnEliminar.Add_Click( { Remove-Selected     })
 
 $btnAgregar.Add_Click({
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Title      = "Seleccionar PDFs para agregar"
+    $dlg.Title      = $script:langDict.L_GUI_DLG_ADD
     $dlg.Filter     = "PDF (*.pdf)|*.pdf"
     $dlg.Multiselect = $true
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
@@ -732,6 +740,7 @@ $btnAgregar.Add_Click({
 })
 
 $btnTema.Add_Click({ Apply-Theme (-not $script:isDark) })
+$listBox.Add_Resize({ $listBox.Invalidate() })
 
 $timerClose.Add_Tick({
     $script:countdown--
@@ -739,7 +748,7 @@ $timerClose.Add_Tick({
         $timerClose.Stop()
         $form.Close()
     } else {
-        $lblStatus.Text = "$(([char]0x2713)) Combinado. Cerrando en $($script:countdown)s..."
+        $lblStatus.Text = "$(([char]0x2713)) $($script:langDict.L_GUI_STATUS_DONE) $($script:countdown)s..."
     }
 })
 
@@ -850,13 +859,13 @@ $btnCombinar.Add_Click({
         $btnCombinar.Enabled = $false
         if ($chkCerrar.Checked) {
             $script:countdown = 5
-            $lblStatus.Text = "$checkChar Combinado. Cerrando en $($script:countdown)s..."
+            $lblStatus.Text = "$(([char]0x2713)) $($script:langDict.L_GUI_STATUS_DONE) $($script:countdown)s..."
             $timerClose.Start()
         } else {
-            $lblStatus.Text = "$checkChar Combinado correctamente."
+            $lblStatus.Text = "$(([char]0x2713)) $($script:langDict.L_GUI_STATUS_DONE) OK"
         }
     } else {
-        [System.Windows.Forms.MessageBox]::Show("No se pudo generar el archivo.`nVerifica que los PDFs no esten protegidos.",
+        [System.Windows.Forms.MessageBox]::Show($script:langDict.L_GUI_ERR_PROT,
             "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
     }
 })

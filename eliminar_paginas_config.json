@@ -3,6 +3,5 @@
     "ModoNuevo":  false,
     "AbrirAlTerminar":  true,
     "AutoCerrar":  false,
-    "WindowWidth":  560,
-    "WindowHeight":  492
+    "TemaOscuro":  false
 }
