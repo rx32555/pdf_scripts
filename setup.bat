@@ -56,8 +56,17 @@ if exist "%SZIP%" (
 echo.
 
 :: ---- Ghostscript ----
+set "GS_FOUND=0"
 where gswin64c.exe >nul 2>&1
-if %errorlevel% equ 0 (
+if %errorlevel% equ 0 set "GS_FOUND=1"
+if "!GS_FOUND!"=="0" (
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\GPL Ghostscript" /s /v "GS_DLL" 2^>nul ^| find /i "GS_DLL"') do (
+        set "GS_DLL=%%B"
+    )
+    if defined GS_DLL set "GS_FOUND=1"
+)
+
+if "!GS_FOUND!"=="1" (
     echo [OK] Ghostscript encontrado en el sistema.
 ) else (
     echo [!] Ghostscript no encontrado. Descargando instalador oficial ^(~80 MB^)...
@@ -77,8 +86,17 @@ if %errorlevel% equ 0 (
     start /wait "%DEPS%\gs_installer.exe"
     del "%DEPS%\gs_installer.exe" >nul 2>&1
 
+    set "GS_FOUND=0"
     where gswin64c.exe >nul 2>&1
-    if %errorlevel% equ 0 (
+    if %errorlevel% equ 0 set "GS_FOUND=1"
+    if "!GS_FOUND!"=="0" (
+        for /f "tokens=2*" %%A in ('reg query "HKLM\SOFTWARE\GPL Ghostscript" /s /v "GS_DLL" 2^>nul ^| find /i "GS_DLL"') do (
+            set "GS_DLL=%%B"
+        )
+        if defined GS_DLL set "GS_FOUND=1"
+    )
+
+    if "!GS_FOUND!"=="1" (
         echo [OK] Ghostscript instalado correctamente.
     ) else (
         echo [!] Ghostscript no detectado en PATH aun.

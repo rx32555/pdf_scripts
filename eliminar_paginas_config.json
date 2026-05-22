@@ -2,5 +2,7 @@
     "ModoEliminar":  true,
     "ModoNuevo":  false,
     "AbrirAlTerminar":  true,
-    "AutoCerrar":  false
+    "AutoCerrar":  false,
+    "WindowWidth":  560,
+    "WindowHeight":  492
 }

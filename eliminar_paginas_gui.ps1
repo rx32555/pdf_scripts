@@ -42,7 +42,7 @@ function Load-Config {
         } catch {}
     }
     # Opciones propias
-    $own = @{ ModoEliminar = $true; ModoNuevo = $false; AbrirAlTerminar = $false; AutoCerrar = $false }
+    $own = @{ ModoEliminar = $true; ModoNuevo = $false; AbrirAlTerminar = $false; AutoCerrar = $false; WindowWidth = 560; WindowHeight = 492 }
     if (Test-Path $configPath) {
         try {
             $j = Get-Content $configPath -Raw | ConvertFrom-Json
@@ -50,6 +50,8 @@ function Load-Config {
             if ($null -ne $j.ModoNuevo)       { $own.ModoNuevo       = [bool]$j.ModoNuevo       }
             if ($null -ne $j.AbrirAlTerminar) { $own.AbrirAlTerminar = [bool]$j.AbrirAlTerminar }
             if ($null -ne $j.AutoCerrar)      { $own.AutoCerrar      = [bool]$j.AutoCerrar      }
+            if ($null -ne $j.WindowWidth)     { $own.WindowWidth     = [int]$j.WindowWidth      }
+            if ($null -ne $j.WindowHeight)    { $own.WindowHeight    = [int]$j.WindowHeight     }
         } catch {}
     }
     return @{
@@ -58,6 +60,8 @@ function Load-Config {
         ModoNuevo       = $own.ModoNuevo
         AbrirAlTerminar = $own.AbrirAlTerminar
         AutoCerrar      = $own.AutoCerrar
+        WindowWidth     = $own.WindowWidth
+        WindowHeight    = $own.WindowHeight
     }
 }
 
@@ -77,6 +81,8 @@ function Save-Config {
             ModoNuevo       = $radNuevo.Checked
             AbrirAlTerminar = $chkAbrir.Checked
             AutoCerrar      = $chkCerrar.Checked
+            WindowWidth     = if ($form) { $form.ClientSize.Width } else { 560 }
+            WindowHeight    = if ($form) { $form.ClientSize.Height } else { 492 }
         } | ConvertTo-Json | Set-Content $configPath -Encoding UTF8
     } catch {}
 }
@@ -346,9 +352,10 @@ $checkChar = [char]0x2713
 # ---- Form ----
 $form = New-Object System.Windows.Forms.Form
 $form.Text            = "Eliminar p" + ([char]0x00E1) + "ginas de PDF"
-$form.ClientSize      = New-Object System.Drawing.Size(560, 492)
+$form.ClientSize      = New-Object System.Drawing.Size($cfg.WindowWidth, $cfg.WindowHeight)
 $form.StartPosition   = "CenterScreen"
-$form.FormBorderStyle = "FixedDialog"
+$form.FormBorderStyle = "Sizable"
+$form.MinimumSize     = New-Object System.Drawing.Size(560, 492)
 $form.MaximizeBox     = $false
 $form.BackColor       = $script:pal.Bg
 $form.ForeColor       = $script:pal.Text
@@ -364,6 +371,7 @@ $form.Add_HandleCreated({
 })
 
 $form.Add_FormClosed({
+    Save-Config
     $timerClose.Stop(); $timerClose.Dispose()
     foreach ($b in @($script:brText, $script:brSelText, $script:brRow1,
                      $script:brRow2, $script:brSelBg, $script:brAccent)) { $b.Dispose() }
@@ -387,6 +395,7 @@ $btnTema.Text     = if ($script:isDark) { "$sunChar Claro" } else { "$moonChar O
 $btnTema.Location = New-Object System.Drawing.Point(448, 5)
 $btnTema.Size     = New-Object System.Drawing.Size(100, 22)
 $btnTema.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
+$btnTema.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnTema
 
 $btnAgregar = New-Object System.Windows.Forms.Button
@@ -394,6 +403,7 @@ $btnAgregar.Text     = "+ A" + $enye + "adir PDF..."
 $btnAgregar.Location = New-Object System.Drawing.Point(308, 5)
 $btnAgregar.Size     = New-Object System.Drawing.Size(132, 22)
 $btnAgregar.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
+$btnAgregar.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnAgregar
 
 # ---- ListBox ----
@@ -408,12 +418,14 @@ $listBox.DrawMode       = [System.Windows.Forms.DrawMode]::OwnerDrawFixed
 $listBox.ItemHeight     = 28
 $listBox.Location       = New-Object System.Drawing.Point(1, 1)
 $listBox.Size           = New-Object System.Drawing.Size(536, 156)
+$listBox.Anchor         = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 $panelList = New-Object System.Windows.Forms.Panel
 $panelList.Location  = New-Object System.Drawing.Point(11, 30)
 $panelList.Size      = New-Object System.Drawing.Size(538, 158)
 $panelList.BackColor = $script:pal.Border
 $panelList.Padding   = New-Object System.Windows.Forms.Padding(1)
+$panelList.Anchor    = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 $panelList.Controls.Add($listBox)
 
 # ---- Boton quitar de lista ----
@@ -421,6 +433,7 @@ $btnEliminar = New-Object System.Windows.Forms.Button
 $btnEliminar.Text     = "Quitar de la lista  [Supr]"
 $btnEliminar.Location = New-Object System.Drawing.Point(11, 196)
 $btnEliminar.Size     = New-Object System.Drawing.Size(180, 26)
+$btnEliminar.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnEliminar
 
 # ---- Separador 1 ----
@@ -428,6 +441,7 @@ $sep1 = New-Object System.Windows.Forms.Label
 $sep1.BackColor = $script:pal.Border
 $sep1.Location  = New-Object System.Drawing.Point(11, 232)
 $sep1.Size      = New-Object System.Drawing.Size(538, 1)
+$sep1.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # ---- Fila Operacion ----
 # Cada par de RadioButtons vive en su propio Panel para grupos de exclusion separados.
@@ -438,11 +452,13 @@ $lblOperacion.Location  = New-Object System.Drawing.Point(12, 244)
 $lblOperacion.Size      = New-Object System.Drawing.Size(72, 18)
 $lblOperacion.BackColor = $script:pal.Bg
 $lblOperacion.ForeColor = $script:pal.Text
+$lblOperacion.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $pnlOperacion = New-Object System.Windows.Forms.Panel
 $pnlOperacion.Location  = New-Object System.Drawing.Point(86, 240)
 $pnlOperacion.Size      = New-Object System.Drawing.Size(462, 24)
 $pnlOperacion.BackColor = $script:pal.Bg
+$pnlOperacion.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $radEliminar = New-Object System.Windows.Forms.RadioButton
 $radEliminar.Text      = "Eliminar estas p" + ([char]0x00E1) + "ginas"
@@ -477,6 +493,7 @@ $lblPaginas.Location  = New-Object System.Drawing.Point(12, 274)
 $lblPaginas.Size      = New-Object System.Drawing.Size(62, 24)
 $lblPaginas.BackColor = $script:pal.Bg
 $lblPaginas.ForeColor = $script:pal.Text
+$lblPaginas.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $txtRange = New-Object System.Windows.Forms.TextBox
 $txtRange.Location    = New-Object System.Drawing.Point(1, 1)
@@ -485,12 +502,14 @@ $txtRange.BackColor   = $script:pal.Input
 $txtRange.ForeColor   = $script:pal.Text
 $txtRange.BorderStyle = "None"
 $txtRange.Font        = New-Object System.Drawing.Font("Segoe UI", 10)
+$txtRange.Anchor      = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 $panelRange = New-Object System.Windows.Forms.Panel
 $panelRange.Location  = New-Object System.Drawing.Point(78, 272)
 $panelRange.Size      = New-Object System.Drawing.Size(240, 24)
 $panelRange.BackColor = $script:pal.Border
 $panelRange.Padding   = New-Object System.Windows.Forms.Padding(1)
+$panelRange.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 $panelRange.Controls.Add($txtRange)
 
 $btnQ1 = New-Object System.Windows.Forms.Button
@@ -498,6 +517,7 @@ $btnQ1.Text     = "P" + ([char]0x00E1) + "g. 1"
 $btnQ1.Location = New-Object System.Drawing.Point(322, 270)
 $btnQ1.Size     = New-Object System.Drawing.Size(50, 26)
 $btnQ1.Font     = New-Object System.Drawing.Font("Segoe UI", 8)
+$btnQ1.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnQ1
 
 $btnQLast = New-Object System.Windows.Forms.Button
@@ -505,6 +525,7 @@ $btnQLast.Text     = ([char]0x00DA) + "ltima"
 $btnQLast.Location = New-Object System.Drawing.Point(374, 270)
 $btnQLast.Size     = New-Object System.Drawing.Size(52, 26)
 $btnQLast.Font     = New-Object System.Drawing.Font("Segoe UI", 8)
+$btnQLast.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnQLast
 
 $btnQPar = New-Object System.Windows.Forms.Button
@@ -512,6 +533,7 @@ $btnQPar.Text     = "Pares"
 $btnQPar.Location = New-Object System.Drawing.Point(428, 270)
 $btnQPar.Size     = New-Object System.Drawing.Size(54, 26)
 $btnQPar.Font     = New-Object System.Drawing.Font("Segoe UI", 8)
+$btnQPar.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnQPar
 
 $btnQImp = New-Object System.Windows.Forms.Button
@@ -519,6 +541,7 @@ $btnQImp.Text     = "Impares"
 $btnQImp.Location = New-Object System.Drawing.Point(484, 270)
 $btnQImp.Size     = New-Object System.Drawing.Size(64, 26)
 $btnQImp.Font     = New-Object System.Drawing.Font("Segoe UI", 8)
+$btnQImp.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnQImp
 
 $lblHint = New-Object System.Windows.Forms.Label
@@ -528,12 +551,14 @@ $lblHint.Size      = New-Object System.Drawing.Size(470, 14)
 $lblHint.BackColor = $script:pal.Bg
 $lblHint.ForeColor = $script:pal.TextDim
 $lblHint.Font      = New-Object System.Drawing.Font("Segoe UI", 7.5)
+$lblHint.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # ---- Separador 2 ----
 $sep2 = New-Object System.Windows.Forms.Label
 $sep2.BackColor = $script:pal.Border
 $sep2.Location  = New-Object System.Drawing.Point(11, 322)
 $sep2.Size      = New-Object System.Drawing.Size(538, 1)
+$sep2.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # ---- Fila Guardar ----
 $lblGuardar = New-Object System.Windows.Forms.Label
@@ -542,11 +567,13 @@ $lblGuardar.Location  = New-Object System.Drawing.Point(12, 334)
 $lblGuardar.Size      = New-Object System.Drawing.Size(62, 18)
 $lblGuardar.BackColor = $script:pal.Bg
 $lblGuardar.ForeColor = $script:pal.Text
+$lblGuardar.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $pnlGuardar = New-Object System.Windows.Forms.Panel
 $pnlGuardar.Location  = New-Object System.Drawing.Point(78, 330)
 $pnlGuardar.Size      = New-Object System.Drawing.Size(470, 24)
 $pnlGuardar.BackColor = $script:pal.Bg
+$pnlGuardar.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $radReemplazar = New-Object System.Windows.Forms.RadioButton
 $radReemplazar.Text      = "Reemplazar original"
@@ -577,6 +604,7 @@ $chkCerrar.Location  = New-Object System.Drawing.Point(12, 364)
 $chkCerrar.Size      = New-Object System.Drawing.Size(185, 20)
 $chkCerrar.ForeColor = $script:pal.Text
 $chkCerrar.BackColor = $script:pal.Bg
+$chkCerrar.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $chkAbrir = New-Object System.Windows.Forms.CheckBox
 $chkAbrir.Text      = "Abrir al terminar"
@@ -585,6 +613,7 @@ $chkAbrir.Location  = New-Object System.Drawing.Point(202, 364)
 $chkAbrir.Size      = New-Object System.Drawing.Size(155, 20)
 $chkAbrir.ForeColor = $script:pal.Text
 $chkAbrir.BackColor = $script:pal.Bg
+$chkAbrir.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $btnProcesar = New-Object System.Windows.Forms.Button
 $btnProcesar.Text      = "Procesar"
@@ -596,6 +625,7 @@ $btnProcesar.ForeColor = [System.Drawing.Color]::White
 $btnProcesar.FlatAppearance.BorderSize         = 0
 $btnProcesar.FlatAppearance.MouseOverBackColor = $script:pal.AccHover
 $btnProcesar.FlatAppearance.MouseDownBackColor = $script:pal.AccPress
+$btnProcesar.Anchor                        = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 $form.AcceptButton = $btnProcesar
 
 # btnProcesar bottom = 358+32 = 390
@@ -607,6 +637,7 @@ $lblStatus.BackColor = $script:pal.Bg
 $lblStatus.ForeColor = $script:pal.TextDim
 $lblStatus.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
 $lblStatus.Text      = ""
+$lblStatus.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # Panel con borde de 1px que envuelve el RichTextBox de omitidos
 # Visible solo cuando hay archivos omitidos
@@ -616,6 +647,7 @@ $panelSkipped.Size      = New-Object System.Drawing.Size(536, 52)
 $panelSkipped.BackColor = $script:pal.Border
 $panelSkipped.Padding   = New-Object System.Windows.Forms.Padding(1)
 $panelSkipped.Visible   = $false
+$panelSkipped.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 $rtbSkipped = New-Object System.Windows.Forms.RichTextBox
 $rtbSkipped.Dock        = [System.Windows.Forms.DockStyle]::Fill
@@ -634,6 +666,7 @@ $lblFolder.Size      = New-Object System.Drawing.Size(536, 14)
 $lblFolder.BackColor = $script:pal.Bg
 $lblFolder.ForeColor = $script:pal.TextDim
 $lblFolder.Font      = New-Object System.Drawing.Font("Segoe UI", 7.5)
+$lblFolder.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # Timer autocerrar
 $script:countdown    = 0

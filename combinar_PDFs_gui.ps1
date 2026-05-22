@@ -40,10 +40,12 @@ function Load-Config {
                 TemaOscuro       = [bool]$j.TemaOscuro
                 CerrarAlTerminar = if ($null -eq $j.CerrarAlTerminar) { $true  } else { [bool]$j.CerrarAlTerminar }
                 GenerarIndice    = if ($null -eq $j.GenerarIndice)    { $false } else { [bool]$j.GenerarIndice    }
+                WindowWidth      = if ($null -eq $j.WindowWidth)      { 560 } else { [int]$j.WindowWidth }
+                WindowHeight     = if ($null -eq $j.WindowHeight)     { 420 } else { [int]$j.WindowHeight }
             }
         } catch {}
     }
-    return @{ AbrirAlTerminar = $true; TemaOscuro = $true; CerrarAlTerminar = $true; GenerarIndice = $false }
+    return @{ AbrirAlTerminar = $true; TemaOscuro = $true; CerrarAlTerminar = $true; GenerarIndice = $false; WindowWidth = 560; WindowHeight = 420 }
 }
 
 function Save-Config {
@@ -53,6 +55,8 @@ function Save-Config {
             TemaOscuro       = $script:isDark
             CerrarAlTerminar = $chkCerrar.Checked
             GenerarIndice    = $chkToc.Checked
+            WindowWidth      = if ($form) { $form.ClientSize.Width } else { 560 }
+            WindowHeight     = if ($form) { $form.ClientSize.Height } else { 420 }
         } | ConvertTo-Json | Set-Content $configPath -Encoding UTF8
     } catch {}
 }
@@ -430,9 +434,10 @@ $checkChar  = [char]0x2713
 # Form
 $form = New-Object System.Windows.Forms.Form
 $form.Text            = "Combinar PDFs"
-$form.ClientSize      = New-Object System.Drawing.Size(560, 420)
+$form.ClientSize      = New-Object System.Drawing.Size($cfg.WindowWidth, $cfg.WindowHeight)
 $form.StartPosition   = "CenterScreen"
-$form.FormBorderStyle = "FixedDialog"
+$form.FormBorderStyle = "Sizable"
+$form.MinimumSize     = New-Object System.Drawing.Size(560, 420)
 $form.MaximizeBox     = $false
 $form.BackColor       = $script:pal.Bg
 $form.ForeColor       = $script:pal.Text
@@ -448,6 +453,7 @@ $form.Add_HandleCreated({
 })
 
 $form.Add_FormClosed({
+    Save-Config
     $timerClose.Stop()
     $timerClose.Dispose()
     foreach ($b in @($script:brText, $script:brSelText, $script:brRow1,
@@ -471,6 +477,7 @@ $btnAgregar.Text     = "+ A" + $enye + "adir PDF..."
 $btnAgregar.Location = New-Object System.Drawing.Point(318, 5)
 $btnAgregar.Size     = New-Object System.Drawing.Size(122, 22)
 $btnAgregar.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
+$btnAgregar.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnAgregar
 
 # Boton tema (top-right)
@@ -479,6 +486,7 @@ $btnTema.Text     = if ($script:isDark) { "$sunChar Claro" } else { "$moonChar O
 $btnTema.Location = New-Object System.Drawing.Point(448, 5)
 $btnTema.Size     = New-Object System.Drawing.Size(100, 22)
 $btnTema.Font     = New-Object System.Drawing.Font("Segoe UI", 9)
+$btnTema.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnTema
 
 # ListBox + panel borde
@@ -493,12 +501,14 @@ $listBox.DrawMode       = [System.Windows.Forms.DrawMode]::OwnerDrawFixed
 $listBox.ItemHeight     = 30
 $listBox.Location       = New-Object System.Drawing.Point(1, 1)
 $listBox.Size           = New-Object System.Drawing.Size(468, 200)
+$listBox.Anchor         = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 $panelList = New-Object System.Windows.Forms.Panel
 $panelList.Location  = New-Object System.Drawing.Point(11, 29)
 $panelList.Size      = New-Object System.Drawing.Size(470, 202)
 $panelList.BackColor = $script:pal.Border
 $panelList.Padding   = New-Object System.Windows.Forms.Padding(1)
+$panelList.Anchor    = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 $panelList.Controls.Add($listBox)
 
 # Botones Up / Down
@@ -507,6 +517,7 @@ $btnUp.Text     = $arrowUp
 $btnUp.Location = New-Object System.Drawing.Point(490, 30)
 $btnUp.Size     = New-Object System.Drawing.Size(58, 38)
 $btnUp.Font     = New-Object System.Drawing.Font("Segoe UI", 14)
+$btnUp.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnUp
 
 $btnDown = New-Object System.Windows.Forms.Button
@@ -514,6 +525,7 @@ $btnDown.Text     = $arrowDown
 $btnDown.Location = New-Object System.Drawing.Point(490, 74)
 $btnDown.Size     = New-Object System.Drawing.Size(58, 38)
 $btnDown.Font     = New-Object System.Drawing.Font("Segoe UI", 14)
+$btnDown.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 Set-BtnStyle $btnDown
 
 # Botones ordenar / gestionar
@@ -521,30 +533,35 @@ $btnNombre = New-Object System.Windows.Forms.Button
 $btnNombre.Text     = "Nombre"
 $btnNombre.Location = New-Object System.Drawing.Point(12, 244)
 $btnNombre.Size     = New-Object System.Drawing.Size(80, 28)
+$btnNombre.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnNombre
 
 $btnFecha = New-Object System.Windows.Forms.Button
 $btnFecha.Text     = "Fecha"
 $btnFecha.Location = New-Object System.Drawing.Point(98, 244)
 $btnFecha.Size     = New-Object System.Drawing.Size(80, 28)
+$btnFecha.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnFecha
 
 $btnTamano = New-Object System.Windows.Forms.Button
 $btnTamano.Text     = "Tama" + $enye + "o"
 $btnTamano.Location = New-Object System.Drawing.Point(184, 244)
 $btnTamano.Size     = New-Object System.Drawing.Size(80, 28)
+$btnTamano.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnTamano
 
 $btnInvertir = New-Object System.Windows.Forms.Button
 $btnInvertir.Text     = "Invertir"
 $btnInvertir.Location = New-Object System.Drawing.Point(270, 244)
 $btnInvertir.Size     = New-Object System.Drawing.Size(76, 28)
+$btnInvertir.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnInvertir
 
 $btnEliminar = New-Object System.Windows.Forms.Button
 $btnEliminar.Text     = "Eliminar  [Supr]"
 $btnEliminar.Location = New-Object System.Drawing.Point(364, 244)
 $btnEliminar.Size     = New-Object System.Drawing.Size(184, 28)
+$btnEliminar.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 Set-BtnStyle $btnEliminar
 
 # Lista de botones que Apply-Theme debe actualizar (excluye Combinar)
@@ -557,6 +574,7 @@ $sep.BackColor   = $script:pal.Border
 $sep.BorderStyle = "None"
 $sep.Location    = New-Object System.Drawing.Point(12, 286)
 $sep.Size        = New-Object System.Drawing.Size(536, 1)
+$sep.Anchor      = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # Nombre de salida
 $lblOut = New-Object System.Windows.Forms.Label
@@ -565,6 +583,7 @@ $lblOut.Location  = New-Object System.Drawing.Point(12, 296)
 $lblOut.Size      = New-Object System.Drawing.Size(210, 16)
 $lblOut.BackColor = $script:pal.Bg
 $lblOut.ForeColor = $script:pal.Text
+$lblOut.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $txtOut = New-Object System.Windows.Forms.TextBox
 $txtOut.Text        = "combinado.pdf"
@@ -573,6 +592,7 @@ $txtOut.Size        = New-Object System.Drawing.Size(348, 24)
 $txtOut.BackColor   = $script:pal.Input
 $txtOut.ForeColor   = $script:pal.Text
 $txtOut.BorderStyle = "FixedSingle"
+$txtOut.Anchor      = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # Checkboxes (estado desde config)
 $chkAbrir = New-Object System.Windows.Forms.CheckBox
@@ -582,6 +602,7 @@ $chkAbrir.Location  = New-Object System.Drawing.Point(12, 346)
 $chkAbrir.Size      = New-Object System.Drawing.Size(180, 20)
 $chkAbrir.ForeColor = $script:pal.Text
 $chkAbrir.BackColor = $script:pal.Bg
+$chkAbrir.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $chkCerrar = New-Object System.Windows.Forms.CheckBox
 $chkCerrar.Text      = "Autocerrar al terminar (5s)"
@@ -590,6 +611,7 @@ $chkCerrar.Location  = New-Object System.Drawing.Point(200, 346)
 $chkCerrar.Size      = New-Object System.Drawing.Size(210, 20)
 $chkCerrar.ForeColor = $script:pal.Text
 $chkCerrar.BackColor = $script:pal.Bg
+$chkCerrar.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 $chkToc = New-Object System.Windows.Forms.CheckBox
 $chkToc.Text      = "Generar " + ([char]0x00ED) + "ndice"
@@ -598,6 +620,7 @@ $chkToc.Location  = New-Object System.Drawing.Point(416, 346)
 $chkToc.Size      = New-Object System.Drawing.Size(132, 20)
 $chkToc.ForeColor = $script:pal.Text
 $chkToc.BackColor = $script:pal.Bg
+$chkToc.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
 # Boton Combinar
 $btnCombinar = New-Object System.Windows.Forms.Button
@@ -610,6 +633,7 @@ $btnCombinar.ForeColor = [System.Drawing.Color]::White
 $btnCombinar.FlatAppearance.BorderSize         = 0
 $btnCombinar.FlatAppearance.MouseOverBackColor = $script:pal.AccHover
 $btnCombinar.FlatAppearance.MouseDownBackColor = $script:pal.AccPress
+$btnCombinar.Anchor                        = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 $form.AcceptButton = $btnCombinar
 
 # Etiqueta destino
@@ -619,6 +643,7 @@ $lblFolder.Size      = New-Object System.Drawing.Size(536, 14)
 $lblFolder.BackColor = $script:pal.Bg
 $lblFolder.ForeColor = $script:pal.TextDim
 $lblFolder.Font      = New-Object System.Drawing.Font("Segoe UI", 7.5)
+$lblFolder.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # Label de estado (resultado de la operacion)
 $lblStatus = New-Object System.Windows.Forms.Label
@@ -628,6 +653,7 @@ $lblStatus.BackColor = $script:pal.Bg
 $lblStatus.ForeColor = $script:pal.TextDim
 $lblStatus.Font      = New-Object System.Drawing.Font("Segoe UI", 9)
 $lblStatus.Text      = ""
+$lblStatus.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 # Timer para autocerrar tras combinar
 $timerClose          = New-Object System.Windows.Forms.Timer

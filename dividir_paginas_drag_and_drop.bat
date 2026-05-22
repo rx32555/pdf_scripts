@@ -14,9 +14,19 @@ for %%F in (%*) do (
         set "entrada=%%~fF"
         set "basepath=%%~dpnF"
 
-        "!CPDF!" -split "!entrada!" -o "!basepath!_p%%d.pdf"
+        set "PAGES=0"
+        for /f "usebackq delims=" %%P in (`""!CPDF!" -pages "!entrada!" 2^>nul"`) do (
+            set "PAGES=%%P"
+        )
 
-        echo Procesado: "%%~nxF"
+        if "!PAGES!"=="1" (
+            echo Omitido ^(solo 1 pagina^): "%%~nxF"
+        ) else if "!PAGES!"=="0" (
+            echo [ERROR] No se pudo leer o archivo invalido: "%%~nxF"
+        ) else (
+            "!CPDF!" -split "!entrada!" -o "!basepath!_p%%d.pdf" >nul 2>&1
+            echo Procesado ^(!PAGES! paginas^): "%%~nxF"
+        )
     ) else (
         echo Omitido ^(no es PDF^): "%%~nxF"
     )
